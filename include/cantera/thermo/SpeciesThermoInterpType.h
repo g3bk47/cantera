@@ -7,7 +7,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_SPECIESTHERMOINTERPTYPE_H
 #define CT_SPECIESTHERMOINTERPTYPE_H
@@ -129,15 +129,30 @@ public:
         return m_lowT;
     }
 
+    //! Set the minimum temperature at which the thermo parameterization is valid
+    virtual void setMinTemp(double Tmin) {
+        m_lowT = Tmin;
+    }
+
     //! Returns the maximum temperature that the thermo parameterization is
     //! valid
     virtual doublereal maxTemp() const {
         return m_highT;
     }
 
+    //! Set the maximum temperature at which the thermo parameterization is valid
+    virtual void setMaxTemp(double Tmax) {
+        m_highT = Tmax;
+    }
+
     //! Returns the reference pressure (Pa)
     virtual doublereal refPressure() const {
         return m_Pref;
+    }
+
+    //! Set the reference pressure [Pa]
+    virtual void setRefPressure(double Pref) {
+        m_Pref = Pref;
     }
 
     //! Check for problems with the parameterization, and generate warnings or
@@ -191,7 +206,11 @@ public:
                                       doublereal* h_RT,
                                       doublereal* s_R) const;
 
-    //! This utility function reports back the type of parameterization and all
+    //! This utility function returns the number of coefficients
+    //! for a given type of species parameterization
+    virtual size_t nCoeffs() const;
+
+    //! This utility function returns the type of parameterization and all
     //! of the parameters for the species.
     /*!
      * All parameters are output variables
@@ -242,8 +261,7 @@ public:
      *  Resets changes made by modifyOneHf298().
      */
     virtual void resetHf298() {
-        throw CanteraError("SpeciesThermoInterpType::resetHf298",
-                           "Not implemented");
+        throw NotImplementedError("SpeciesThermoInterpType::resetHf298");
     }
 
 protected:

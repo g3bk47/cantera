@@ -6,7 +6,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/thermo/WaterPropsIAPWS.h"
 #include "cantera/base/ctexceptions.h"
@@ -142,10 +142,10 @@ doublereal WaterPropsIAPWS::density_const(doublereal pressure,
                     // relatively high -> convergence from above seems robust.
                     rhoguess = 1000.;
                 } else if (phase == WATER_UNSTABLELIQUID || phase == WATER_UNSTABLEGAS) {
-                    throw CanteraError("WaterPropsIAPWS::density",
+                    throw CanteraError("WaterPropsIAPWS::density_const",
                                        "Unstable Branch finder is untested");
                 } else {
-                    throw CanteraError("WaterPropsIAPWS::density",
+                    throw CanteraError("WaterPropsIAPWS::density_const",
                                        "unknown state: {}", phase);
                 }
             }
@@ -470,7 +470,7 @@ doublereal WaterPropsIAPWS::densSpinodalWater() const
     }
 
     if (!conv) {
-        throw CanteraError("WaterPropsIAPWS::densSpinodalWater()",
+        throw CanteraError("WaterPropsIAPWS::densSpinodalWater",
                            "convergence failure");
     }
     // Restore the original delta
@@ -557,7 +557,7 @@ doublereal WaterPropsIAPWS::densSpinodalSteam() const
     }
 
     if (!conv) {
-        throw CanteraError("WaterPropsIAPWS::densSpinodalSteam()",
+        throw CanteraError("WaterPropsIAPWS::densSpinodalSteam",
                            "convergence failure");
     }
     // Restore the original delta

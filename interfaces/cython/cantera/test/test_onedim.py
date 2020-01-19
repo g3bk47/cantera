@@ -122,7 +122,7 @@ class TestFreeFlame(utilities.CanteraTest):
     tol_ts = [1.0e-4, 1.0e-11]  # [rtol atol] for time stepping
 
     def create_sim(self, p, Tin, reactants, width=0.05, mech='h2o2.xml'):
-        # IdealGasMix object used to compute mixture properties
+        # Solution object used to compute mixture properties
         self.gas = ct.Solution(mech)
         self.gas.TPX = Tin, p, reactants
 
@@ -169,6 +169,13 @@ class TestFreeFlame(utilities.CanteraTest):
         self.gas.equilibrate('HP')
         Tad = self.gas.T
         self.assertNear(Tad, self.sim.T[-1], 2e-2)
+
+        # Re-solving with auto=False should not trigger a DomainTooNarrow
+        # exception, and should leave domain width constant
+        self.sim.flame.grid *= 0.3
+        old_width = self.sim.grid[-1]
+        self.sim.solve(loglevel=0, refine_grid=True, auto=False)
+        self.assertNear(self.sim.grid[-1], old_width)
 
     def test_auto_width2(self):
         self.create_sim(p=ct.one_atm, Tin=400, reactants='H2:0.8, O2:0.5',
@@ -560,7 +567,7 @@ class TestDiffusionFlame(utilities.CanteraTest):
     def create_sim(self, p, fuel='H2:1.0, AR:1.0', T_fuel=300, mdot_fuel=0.24,
                    oxidizer='O2:0.2, AR:0.8', T_ox=300, mdot_ox=0.72, width=0.02):
 
-        # IdealGasMix object used to compute mixture properties
+        # Solution object used to compute mixture properties
         self.gas = ct.Solution('h2o2.xml', 'ohmech')
         self.gas.TP = T_fuel, p
 
@@ -896,7 +903,7 @@ class TestImpingingJet(utilities.CanteraTest):
 
         # integrate the coverage equations holding the gas composition fixed
         # to generate a good starting estimate for the coverages.
-        surf_phase.advance_coverages(1.0)
+        surf_phase.advance_coverages(1.)
 
         sim = ct.ImpingingJet(gas=gas, width=width, surface=surf_phase)
         sim.set_refine_criteria(10.0, 0.3, 0.4, 0.0)
@@ -945,7 +952,7 @@ class TestIonFreeFlame(utilities.CanteraTest):
         Tin = 300
         width = 0.03
 
-        # IdealGasMix object used to compute mixture properties
+        # Solution object used to compute mixture properties
         self.gas = ct.Solution('ch4_ion.cti')
         self.gas.TPX = Tin, p, reactants
         self.sim = ct.IonFreeFlame(self.gas, width=width)
@@ -971,7 +978,7 @@ class TestIonBurnerFlame(utilities.CanteraTest):
         Tburner = 400
         width = 0.01
 
-        # IdealGasMix object used to compute mixture properties
+        # Solution object used to compute mixture properties
         self.gas = ct.Solution('ch4_ion.cti')
         self.gas.TPX = Tburner, p, reactants
         self.sim = ct.IonBurnerFlame(self.gas, width=width)

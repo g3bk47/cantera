@@ -1,7 +1,7 @@
 //! @file boundaries1D.cpp
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/oneD/Inlet1D.h"
 #include "cantera/oneD/OneDim.h"
@@ -137,7 +137,7 @@ void Inlet1D::init()
     }
 
     // components = u, V, T, lambda, + mass fractions
-    m_nsp = m_flow->nComponents() - c_offset_Y;
+    m_nsp = m_flow->phase().nSpecies();
     m_yin.resize(m_nsp, 0.0);
     if (m_xstr != "") {
         setMoleFractions(m_xstr);
@@ -441,7 +441,7 @@ void OutletRes1D::init()
         throw CanteraError("OutletRes1D::init","no flow!");
     }
 
-    m_nsp = m_flow->nComponents() - c_offset_Y;
+    m_nsp = m_flow->phase().nSpecies();
     m_yres.resize(m_nsp, 0.0);
     if (m_xstr != "") {
         setMoleFractions(m_xstr);

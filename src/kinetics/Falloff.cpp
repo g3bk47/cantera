@@ -4,10 +4,11 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/base/stringUtils.h"
 #include "cantera/base/ctexceptions.h"
+#include "cantera/base/global.h"
 #include "cantera/kinetics/Falloff.h"
 
 namespace Cantera
@@ -43,6 +44,15 @@ void Troe::init(const vector_fp& c)
     }
 
     if (c.size() == 4) {
+        if (std::abs(c[3]) < SmallNumber) {
+            warn_user("Troe::init",
+                "Unexpected parameter value T2=0. Omitting exp(T2/T) term from "
+                "falloff expression. To suppress this warning, remove value "
+                "for T2 from the input file. In the unlikely case that the "
+                "exp(T2/T) term should be included with T2 effectively equal "
+                "to 0, set T2 to a sufficiently small value "
+                "(i.e. T2 < 1e-16).");
+        }
         m_t2 = c[3];
     }
 }

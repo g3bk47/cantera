@@ -1,7 +1,7 @@
 //! @file IonGasTransport.cpp
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/transport/IonGasTransport.h"
 #include "cantera/numerics/polyfit.h"
@@ -21,7 +21,7 @@ void IonGasTransport::init(thermo_t* thermo, int mode, int log_level)
     m_nsp = m_thermo->nSpecies();
     m_mode = mode;
     if (m_mode == CK_Mode) {
-        throw CanteraError("IonGasTransport::init(thermo, mode, log_level)",
+        throw CanteraError("IonGasTransport::init",
                            "mode = CK_Mode, which is an outdated lower-order fit.");
     }
     m_log_level = log_level;
@@ -135,7 +135,7 @@ double IonGasTransport::electricalConductivity()
     double sum = 0.0;
     for (size_t k : m_kIon) {
         double ND_k = m_molefracs[k] * p / m_kbt;
-        sum += ND_k * abs(m_speciesCharge[k]) * ElectronCharge * mobi[k];
+        sum += ND_k * std::abs(m_speciesCharge[k]) * ElectronCharge * mobi[k];
     }
     if (m_kElectron != npos) {
         sum += m_molefracs[m_kElectron] * p / m_kbt *
@@ -266,7 +266,7 @@ void IonGasTransport::setupN64()
                     m_epsilon(i,j) = epsilon;
                 }
 
-                // Calculate dipersion coefficient and quadrupole polarizability
+                // Calculate dispersion coefficient and quadrupole polarizability
                 // from curve fitting if not available.
                 // Neutrals
                 if (m_disp[j] == 0.0) {
@@ -308,7 +308,7 @@ double IonGasTransport::omega11_n64(const double tstar, const double gamma)
     double logtstar = log(tstar);
     double om11 = 0.0;
     if (tstar < 0.01) {
-        throw CanteraError("IonGasTransport::omega11_n64(tstar, gamma)",
+        throw CanteraError("IonGasTransport::omega11_n64",
                            "tstar = {} is smaller than 0.01", tstar);
     } else if (tstar <= 0.04) {
         // for interval 0.01 to 0.04, SSE = 0.006; R^2 = 1; RMSE = 0.020
@@ -329,7 +329,7 @@ double IonGasTransport::omega11_n64(const double tstar, const double gamma)
               + (0.000614 - 0.00285 * gamma) * pow(logtstar,4)
               + 0.000238 * pow(logtstar,5);
     } else {
-        throw CanteraError("IonGasTransport::omega11_n64(tstar, gamma)",
+        throw CanteraError("IonGasTransport::omega11_n64",
                            "tstar = {} is larger than 1000", tstar);
     }
     return om11;

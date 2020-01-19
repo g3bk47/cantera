@@ -6,7 +6,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/thermo/MaskellSolidSolnPhase.h"
 #include "cantera/base/stringUtils.h"
@@ -64,6 +64,9 @@ void MaskellSolidSolnPhase::setDensity(const doublereal rho)
     // Unless the input density is exactly equal to the density calculated and
     // stored in the State object, we throw an exception. This is because the
     // density is NOT an independent variable.
+    warn_deprecated("MaskellSolidSolnPhase::setDensity",
+        "Overloaded function to be removed after Cantera 2.5. "
+        "Error will be thrown by Phase::setDensity instead");
     double dens = density();
     if (rho != dens) {
         throw CanteraError("MaskellSolidSolnPhase::setDensity",
@@ -81,7 +84,7 @@ void MaskellSolidSolnPhase::calcDensity()
     for (size_t i = 0; i < m_kk; i++) {
         vtotal += vbar[i] * moleFracs[i];
     }
-    Phase::setDensity(meanMolecularWeight() / vtotal);
+    Phase::assignDensity(meanMolecularWeight() / vtotal);
 }
 
 void MaskellSolidSolnPhase::setPressure(doublereal p)
@@ -91,6 +94,9 @@ void MaskellSolidSolnPhase::setPressure(doublereal p)
 
 void MaskellSolidSolnPhase::setMolarDensity(const doublereal n)
 {
+    warn_deprecated("MaskellSolidSolnPhase::setMolarDensity",
+        "Overloaded function to be removed after Cantera 2.5. "
+        "Error will be thrown by Phase::setMolarDensity instead");
     throw CanteraError("MaskellSolidSolnPhase::setMolarDensity",
                        "Density is not an independent variable");
 }
@@ -141,17 +147,17 @@ void MaskellSolidSolnPhase::getChemPotentials_RT(doublereal* mu) const
 
 void MaskellSolidSolnPhase::getPartialMolarEnthalpies(doublereal* hbar) const
 {
-    throw CanteraError("MaskellSolidSolnPhase::getPartialMolarEnthalpies()", "Not yet implemented.");
+    throw NotImplementedError("MaskellSolidSolnPhase::getPartialMolarEnthalpies");
 }
 
 void MaskellSolidSolnPhase::getPartialMolarEntropies(doublereal* sbar) const
 {
-    throw CanteraError("MaskellSolidSolnPhase::getPartialMolarEntropies()", "Not yet implemented.");
+    throw NotImplementedError("MaskellSolidSolnPhase::getPartialMolarEntropies");
 }
 
 void MaskellSolidSolnPhase::getPartialMolarCp(doublereal* cpbar) const
 {
-    throw CanteraError("MaskellSolidSolnPhase::getPartialMolarCp()", "Not yet implemented.");
+    throw NotImplementedError("MaskellSolidSolnPhase::getPartialMolarCp");
 }
 
 void MaskellSolidSolnPhase::getPartialMolarVolumes(doublereal* vbar) const
@@ -174,6 +180,18 @@ void MaskellSolidSolnPhase::getStandardChemPotentials(doublereal* mu) const
 }
 
 // Utility Functions
+
+void MaskellSolidSolnPhase::initThermo()
+{
+    if (m_input.hasKey("excess-enthalpy")) {
+        set_h_mix(m_input.convert("excess-enthalpy", "J/kmol"));
+    }
+    if (m_input.hasKey("product-species")) {
+        setProductSpecies(m_input["product-species"].asString());
+    }
+    VPStandardStateTP::initThermo();
+}
+
 
 void MaskellSolidSolnPhase::initThermoXML(XML_Node& phaseNode, const std::string& id_)
 {

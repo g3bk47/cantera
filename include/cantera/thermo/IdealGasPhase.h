@@ -6,7 +6,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_IDEALGASPHASE_H
 #define CT_IDEALGASPHASE_H
@@ -311,6 +311,14 @@ public:
 
     virtual std::string type() const {
         return "IdealGas";
+    }
+
+    //! String indicating the mechanical phase of the matter in this Phase.
+    /*!
+     * For the `IdealGasPhase`, this string is always `gas`.
+     */
+    virtual std::string phaseOfMatter() const {
+        return "gas";
     }
 
     //! @name Molar Thermodynamic Properties of the Solution
@@ -631,6 +639,7 @@ private:
      */
     void _updateThermo() const;
 };
+
 }
 
 #endif

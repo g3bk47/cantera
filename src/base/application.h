@@ -1,7 +1,7 @@
 //! @file application.h
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_BASE_APPLICATION_H
 #define CT_BASE_APPLICATION_H
@@ -18,6 +18,8 @@ namespace Cantera
 {
 
 class XML_Node;
+
+int get_modified_time(const std::string& path);
 
 /*!
  * @defgroup globalData Global Data
@@ -336,6 +338,7 @@ public:
     //! prevent certain tests from failing.
     void suppress_deprecation_warnings() {
         m_suppress_deprecation_warnings = true;
+        m_fatal_deprecation_warnings = false;
     }
 
     //! Turns deprecation warnings into exceptions. Activated within the test
@@ -343,6 +346,10 @@ public:
     void make_deprecation_warnings_fatal() {
         m_fatal_deprecation_warnings = true;
     }
+
+    //! Print a user warning arising during usage of *method*. Additional
+    //! information can be specified in *extra*.
+    void warn_user(const std::string& method, const std::string& extra="");
 
     //! Globally disable printing of warnings about problematic thermo data,
     //! e.g. NASA polynomials with discontinuities at the midpoint temperature.

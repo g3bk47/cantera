@@ -5,7 +5,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/thermo/ThermoFactory.h"
 
@@ -50,29 +50,50 @@ std::mutex ThermoFactory::thermo_mutex;
 ThermoFactory::ThermoFactory()
 {
     reg("IdealGas", []() { return new IdealGasPhase(); });
+    m_synonyms["ideal-gas"] = "IdealGas";
     reg("Incompressible", []() { return new ConstDensityThermo(); });
+    m_synonyms["constant-density"] = "Incompressible";
     reg("Surface", []() { return new SurfPhase(); });
+    m_synonyms["ideal-surface"] = "Surface";
     reg("Edge", []() { return new EdgePhase(); });
+    m_synonyms["edge"] = "Edge";
     reg("Metal", []() { return new MetalPhase(); });
+    m_synonyms["electron-cloud"] = "Metal";
     reg("StoichSubstance", []() { return new StoichSubstance(); });
+    m_synonyms["fixed-stoichiometry"] = "StoichSubstance";
     reg("PureFluid", []() { return new PureFluidPhase(); });
+    m_synonyms["pure-fluid"] = "PureFluid";
     reg("LatticeSolid", []() { return new LatticeSolidPhase(); });
+    m_synonyms["compound-lattice"] = "LatticeSolid";
     reg("Lattice", []() { return new LatticePhase(); });
+    m_synonyms["lattice"] = "Lattice";
     reg("HMW", []() { return new HMWSoln(); });
+    m_synonyms["HMW-electrolyte"] = "HMW";
     reg("IdealSolidSolution", []() { return new IdealSolidSolnPhase(); });
+    m_synonyms["ideal-condensed"] = "IdealSolidSolution";
     reg("DebyeHuckel", []() { return new DebyeHuckel(); });
+    m_synonyms["Debye-Huckel"] = "DebyeHuckel";
     reg("IdealMolalSolution", []() { return new IdealMolalSoln(); });
+    m_synonyms["ideal-molal-solution"] = "IdealMolalSolution";
     reg("IdealGasVPSS", []() { return new IdealSolnGasVPSS(); });
-    m_synonyms["IdealGasVPSS"] = "IdealSolnVPSS";
+    m_synonyms["IdealSolnVPSS"] = "IdealGasVPSS";
+    m_synonyms["ideal-solution-VPSS"] = "IdealGasVPSS";
+    m_synonyms["ideal-gas-VPSS"] = "IdealGasVPSS";
     reg("Margules", []() { return new MargulesVPSSTP(); });
     reg("IonsFromNeutralMolecule", []() { return new IonsFromNeutralVPSSTP(); });
+    m_synonyms["ions-from-neutral-molecule"] = "IonsFromNeutralMolecule";
     reg("FixedChemPot", []() { return new FixedChemPotSSTP(); });
+    m_synonyms["fixed-chemical-potential"] = "FixedChemPot";
     reg("Redlich-Kister", []() { return new RedlichKisterVPSSTP(); });
     reg("RedlichKwong", []() { return new RedlichKwongMFTP(); });
     m_synonyms["RedlichKwongMFTP"] = "RedlichKwong";
+    m_synonyms["Redlich-Kwong"] = "RedlichKwong";
     reg("MaskellSolidSolnPhase", []() { return new MaskellSolidSolnPhase(); });
+    m_synonyms["Maskell-solid-solution"] = "MaskellSolidSolnPhase";
     reg("PureLiquidWater", []() { return new WaterSSTP(); });
+    m_synonyms["liquid-water-IAPWS95"] = "PureLiquidWater";
     reg("BinarySolutionTabulatedThermo", []() { return new BinarySolutionTabulatedThermo(); });
+    m_synonyms["binary-solution-tabulated"] = "BinarySolutionTabulatedThermo";
 }
 
 ThermoPhase* ThermoFactory::newThermoPhase(const std::string& model)
@@ -88,18 +109,39 @@ ThermoPhase* newPhase(XML_Node& xmlphase)
     return t.release();
 }
 
+unique_ptr<ThermoPhase> newPhase(AnyMap& phaseNode, const AnyMap& rootNode)
+{
+    unique_ptr<ThermoPhase> t(newThermoPhase(phaseNode["thermo"].asString()));
+    setupPhase(*t, phaseNode, rootNode);
+    return t;
+}
+
 ThermoPhase* newPhase(const std::string& infile, std::string id)
 {
-    XML_Node* root = get_XML_File(infile);
+    size_t dot = infile.find_last_of(".");
+    string extension;
+    if (dot != npos) {
+        extension = toLowerCopy(infile.substr(dot+1));
+    }
     if (id == "-") {
         id = "";
     }
-    XML_Node* xphase = get_XML_NameID("phase", "#"+id, root);
-    if (!xphase) {
-        throw CanteraError("newPhase",
-                           "Couldn't find phase named \"" + id + "\" in file, " + infile);
+
+    if (extension == "yml" || extension == "yaml") {
+        AnyMap root = AnyMap::fromYamlFile(infile);
+        AnyMap& phase = root["phases"].getMapWhere("name", id);
+        unique_ptr<ThermoPhase> t(newThermoPhase(phase["thermo"].asString()));
+        setupPhase(*t, phase, root);
+        return t.release();
+    } else {
+        XML_Node* root = get_XML_File(infile);
+        XML_Node* xphase = get_XML_NameID("phase", "#"+id, root);
+        if (!xphase) {
+            throw CanteraError("newPhase",
+                               "Couldn't find phase named \"" + id + "\" in file, " + infile);
+        }
+        return newPhase(*xphase);
     }
-    return newPhase(*xphase);
 }
 
 //!  Gather a vector of pointers to XML_Nodes for a phase
@@ -180,8 +222,8 @@ static void formSpeciesXMLNodeList(std::vector<XML_Node*> &spDataNodeList,
                     // Find the species in the database by name.
                     auto iter = speciesNodes.find(stemp);
                     if (iter == speciesNodes.end()) {
-                        throw CanteraError("importPhase","no data for species, \""
-                                           + stemp + "\"");
+                        throw CanteraError("formSpeciesXMLNodeList",
+                            "no data for species, \"{}\"", stemp);
                     }
                     spNamesList.push_back(stemp);
                     spDataNodeList.push_back(iter->second);
@@ -208,7 +250,6 @@ void importPhase(XML_Node& phase, ThermoPhase* th)
     th->setXMLdata(phase);
 
     // set the id attribute of the phase to the 'id' attribute in the XML tree.
-    th->setID(phase.id());
     th->setName(phase.id());
 
     // Number of spatial dimensions. Defaults to 3 (bulk phase)
@@ -216,7 +257,7 @@ void importPhase(XML_Node& phase, ThermoPhase* th)
         int idim = intValue(phase["dim"]);
         if (idim < 1 || idim > 3) {
             throw CanteraError("importPhase",
-                               "phase, " + th->id() +
+                               "phase, " + th->name() +
                                ", has unphysical number of dimensions: " + phase["dim"]);
         }
         th->setNDim(idim);
@@ -232,7 +273,7 @@ void importPhase(XML_Node& phase, ThermoPhase* th)
         th->setParametersFromXML(eos);
     } else {
         throw CanteraError("importPhase",
-                           " phase, " + th->id() +
+                           " phase, " + th->name() +
                            ", XML_Node does not have a \"thermo\" XML_Node");
     }
 
@@ -242,7 +283,7 @@ void importPhase(XML_Node& phase, ThermoPhase* th)
         vpss_ptr = dynamic_cast <VPStandardStateTP*>(th);
         if (vpss_ptr == 0) {
             throw CanteraError("importPhase",
-                               "phase, " + th->id() + ", was VPSS, but dynamic cast failed");
+                               "phase, " + th->name() + ", was VPSS, but dynamic cast failed");
         }
     }
 
@@ -258,7 +299,7 @@ void importPhase(XML_Node& phase, ThermoPhase* th)
     vector<XML_Node*> sparrays = phase.getChildren("speciesArray");
     if (ssConvention != cSS_CONVENTION_SLAVE && sparrays.empty()) {
         throw CanteraError("importPhase",
-                           "phase, " + th->id() + ", has zero \"speciesArray\" XML nodes.\n"
+                           "phase, " + th->name() + ", has zero \"speciesArray\" XML nodes.\n"
                            + " There must be at least one speciesArray nodes "
                            "with one or more species");
     }
@@ -302,9 +343,9 @@ void importPhase(XML_Node& phase, ThermoPhase* th)
         // local file containing the phase element, or may be in another file.
         XML_Node* db = get_XML_Node(speciesArray["datasrc"], &phase.root());
         if (db == 0) {
-            throw CanteraError("importPhase()",
-                               " Can not find XML node for species database: "
-                               + speciesArray["datasrc"]);
+            throw CanteraError("importPhase",
+                               "Can not find XML node for species database: {}",
+                               speciesArray["datasrc"]);
         }
 
         // add this node to the list of species database nodes.
@@ -323,7 +364,7 @@ void importPhase(XML_Node& phase, ThermoPhase* th)
 
     size_t nsp = spDataNodeList.size();
     if (ssConvention == cSS_CONVENTION_SLAVE && nsp > 0) {
-        throw CanteraError("importPhase()", "For Slave standard states, "
+        throw CanteraError("importPhase", "For Slave standard states, "
             "number of species must be zero: {}", nsp);
     }
     for (size_t k = 0; k < nsp; k++) {
@@ -351,6 +392,187 @@ void importPhase(XML_Node& phase, ThermoPhase* th)
     // XML phase object
     std::string id = "";
     th->initThermoXML(phase, id);
+}
+
+void addDefaultElements(ThermoPhase& thermo, const vector<string>& element_names) {
+    for (const auto& symbol : element_names) {
+        thermo.addElement(symbol);
+    }
+}
+
+void addElements(ThermoPhase& thermo, const vector<string>& element_names,
+                 const AnyValue& elements, bool allow_default)
+{
+    const auto& local_elements = elements.asMap("symbol");
+    for (const auto& symbol : element_names) {
+        if (local_elements.count(symbol)) {
+            auto& element = *local_elements.at(symbol);
+            double weight = element["atomic-weight"].asDouble();
+            long int number = element.getInt("atomic-number", 0);
+            double e298 = element.getDouble("entropy298", ENTROPY298_UNKNOWN);
+            thermo.addElement(symbol, weight, number, e298);
+        } else if (allow_default) {
+            thermo.addElement(symbol);
+        } else {
+            throw InputFileError("addElements", elements,
+                                 "Element '{}' not found", symbol);
+        }
+    }
+}
+
+void addSpecies(ThermoPhase& thermo, const AnyValue& names, const AnyValue& species)
+{
+    if (names.is<vector<string>>()) {
+        // 'names' is a list of species names which should be found in 'species'
+        const auto& species_nodes = species.asMap("name");
+        for (const auto& name : names.asVector<string>()) {
+            if (species_nodes.count(name)) {
+                thermo.addSpecies(newSpecies(*species_nodes.at(name)));
+            } else {
+                throw InputFileError("addSpecies", species,
+                    "Could not find a species named '{}'.", name);
+            }
+        }
+    } else if (names.is<string>() && names.asString() == "all") {
+        // The keyword 'all' means to add all species from this source
+        for (const auto& item : species.asVector<AnyMap>()) {
+            thermo.addSpecies(newSpecies(item));
+        }
+    } else {
+        throw InputFileError("addSpecies", names,
+            "Could not parse species declaration of type '{}'", names.type_str());
+    }
+}
+
+void setupPhase(ThermoPhase& thermo, AnyMap& phaseNode, const AnyMap& rootNode)
+{
+    thermo.setName(phaseNode["name"].asString());
+    if (rootNode.hasKey("__file__")) {
+        phaseNode["__file__"] = rootNode["__file__"];
+    }
+
+    if (phaseNode.hasKey("deprecated")) {
+        string msg = phaseNode["deprecated"].asString();
+        string filename = phaseNode.getString("__file__", "unknown file");
+        string method = fmt::format("{}/{}", filename, phaseNode["name"].asString());
+        warn_deprecated(method, msg);
+    }
+
+    // Add elements
+    if (phaseNode.hasKey("elements")) {
+        if (phaseNode.getBool("skip-undeclared-elements", false)) {
+            thermo.ignoreUndefinedElements();
+        } else {
+            thermo.throwUndefinedElements();
+        }
+
+        if (phaseNode["elements"].is<vector<string>>()) {
+            // 'elements' is a list of element symbols
+            if (rootNode.hasKey("elements")) {
+                addElements(thermo, phaseNode["elements"].asVector<string>(),
+                            rootNode["elements"], true);
+            } else {
+                addDefaultElements(thermo, phaseNode["elements"].asVector<string>());
+            }
+        } else if (phaseNode["elements"].is<vector<AnyMap>>()) {
+            // Each item in 'elements' is a map with one item, where the key is
+            // a section in this file or another YAML file, and the value is a
+            // list of element symbols to read from that section
+            for (const auto& elemNode : phaseNode["elements"].asVector<AnyMap>()) {
+                const string& source = elemNode.begin()->first;
+                const auto& names = elemNode.begin()->second.asVector<string>();
+                const auto& slash = boost::ifind_last(source, "/");
+                if (slash) {
+                    std::string fileName(source.begin(), slash.begin());
+                    std::string node(slash.end(), source.end());
+                    const AnyMap elements = AnyMap::fromYamlFile(fileName,
+                        rootNode.getString("__file__", ""));
+                    addElements(thermo, names, elements.at(node), false);
+                } else if (rootNode.hasKey(source)) {
+                    addElements(thermo, names, rootNode.at(source), false);
+                } else if (source == "default") {
+                    addDefaultElements(thermo, names);
+                } else {
+                    throw InputFileError("setupPhase", elemNode,
+                        "Could not find elements section named '{}'", source);
+                }
+            }
+        } else {
+            throw InputFileError("setupPhase", phaseNode["elements"],
+                "Could not parse elements declaration of type '{}'",
+                phaseNode["elements"].type_str());
+        }
+    } else {
+        // If no elements list is provided, just add elements as-needed from the
+        // default list.
+        thermo.addUndefinedElements();
+    }
+
+    // Add species
+    if (phaseNode.hasKey("species")) {
+        if (phaseNode["species"].is<vector<string>>()) {
+            // 'species' is a list of species names to be added from the current
+            // file's 'species' section
+            addSpecies(thermo, phaseNode["species"], rootNode["species"]);
+        } else if (phaseNode["species"].is<string>()) {
+            // 'species' is a keyword applicable to the current file's 'species'
+            // section
+            addSpecies(thermo, phaseNode["species"], rootNode["species"]);
+        } else if (phaseNode["species"].is<vector<AnyMap>>()) {
+            // Each item in 'species' is a map with one item, where the key is
+            // a section in this file or another YAML file, and the value is a
+            // list of species names to read from that section
+            for (const auto& speciesNode : phaseNode["species"].asVector<AnyMap>()) {
+                const string& source = speciesNode.begin()->first;
+                const auto& names = speciesNode.begin()->second;
+                const auto& slash = boost::ifind_last(source, "/");
+                if (slash) {
+                    // source is a different input file
+                    std::string fileName(source.begin(), slash.begin());
+                    std::string node(slash.end(), source.end());
+                    AnyMap species = AnyMap::fromYamlFile(fileName,
+                        rootNode.getString("__file__", ""));
+                    addSpecies(thermo, names, species[node]);
+                } else if (rootNode.hasKey(source)) {
+                    // source is in the current file
+                    addSpecies(thermo, names, rootNode[source]);
+                } else {
+                    throw InputFileError("setupPhase", speciesNode,
+                        "Could not find species section named '{}'", source);
+                }
+            }
+        } else {
+            throw InputFileError("setupPhase", phaseNode["species"],
+                "Could not parse species declaration of type '{}'",
+                phaseNode["species"].type_str());
+        }
+    } else if (rootNode.hasKey("species")) {
+        // By default, add all species from the 'species' section
+        addSpecies(thermo, AnyValue("all"), rootNode["species"]);
+    }
+
+    auto* vpssThermo = dynamic_cast<VPStandardStateTP*>(&thermo);
+    if (vpssThermo) {
+        for (size_t k = 0; k < thermo.nSpecies(); k++) {
+            string model;
+            if (thermo.species(k)->input.hasKey("equation-of-state")) {
+                model = thermo.species(k)->input["equation-of-state"]["model"].asString();
+            } else {
+                model = "ideal-gas";
+            }
+            vpssThermo->installPDSS(k, unique_ptr<PDSS>(newPDSS(model)));
+        }
+    }
+
+    thermo.setParameters(phaseNode);
+    thermo.initThermo();
+
+    if (phaseNode.hasKey("state")) {
+        auto node = phaseNode["state"].as<AnyMap>();
+        thermo.setState(node);
+    } else {
+        thermo.setState_TP(298.15, OneAtm);
+    }
 }
 
 void installElements(Phase& th, const XML_Node& phaseNode)
@@ -389,8 +611,8 @@ void installElements(Phase& th, const XML_Node& phaseNode)
             e = dbe->findByAttr("name",enames[i]);
         }
         if (!e) {
-            throw CanteraError("addElementsFromXML","no data for element "
-                               +enames[i]);
+            throw CanteraError("installElements", "no data for element '{}'",
+                               enames[i]);
         }
 
         // Add the element
@@ -422,7 +644,7 @@ const XML_Node* speciesXML_Node(const std::string& kname,
     }
     string jname = phaseSpeciesData->name();
     if (jname != "speciesData") {
-        throw CanteraError("speciesXML_Node()",
+        throw CanteraError("speciesXML_Node",
                            "Unexpected phaseSpeciesData name: " + jname);
     }
     vector<XML_Node*> xspecies = phaseSpeciesData->getChildren("species");

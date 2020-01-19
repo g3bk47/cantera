@@ -6,7 +6,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 /**
  * @defgroup tranprops Transport Properties for Species in Phases
@@ -654,6 +654,11 @@ public:
      */
     virtual void setThermo(thermo_t& thermo);
 
+    //! Set root Solution holding all phase information
+    virtual void setRoot(std::shared_ptr<Solution> root) {
+        m_root = root;
+    }
+
 protected:
     //! Enable the transport object for use.
     /*!
@@ -680,6 +685,9 @@ protected:
     //! Velocity basis from which diffusion velocities are computed.
     //! Defaults to the mass averaged basis = -2
     int m_velocityBasis;
+
+    //! reference to Solution
+    std::weak_ptr<Solution> m_root;
 };
 
 }

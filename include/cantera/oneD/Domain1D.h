@@ -1,7 +1,7 @@
  //! @file Domain1D.h
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_DOMAIN1D_H
 #define CT_DOMAIN1D_H
@@ -139,7 +139,7 @@ public:
     //! Throws an exception if n is greater than nComponents()-1
     void checkComponentIndex(size_t n) const {
         if (n >= m_nv) {
-            throw IndexError("checkComponentIndex", "points", n, m_nv-1);
+            throw IndexError("Domain1D::checkComponentIndex", "points", n, m_nv-1);
         }
     }
 
@@ -148,7 +148,7 @@ public:
     //! which take an array pointer.
     void checkComponentArraySize(size_t nn) const {
         if (m_nv > nn) {
-            throw ArraySizeError("checkComponentArraySize", nn, m_nv);
+            throw ArraySizeError("Domain1D::checkComponentArraySize", nn, m_nv);
         }
     }
 
@@ -161,7 +161,7 @@ public:
     //! Throws an exception if n is greater than nPoints()-1
     void checkPointIndex(size_t n) const {
         if (n >= m_points) {
-            throw IndexError("checkPointIndex", "points", n, m_points-1);
+            throw IndexError("Domain1D::checkPointIndex", "points", n, m_points-1);
         }
     }
 
@@ -170,7 +170,7 @@ public:
     //! which take an array pointer.
     void checkPointArraySize(size_t nn) const {
         if (m_points > nn) {
-            throw ArraySizeError("checkPointArraySize", nn, m_points);
+            throw ArraySizeError("Domain1D::checkPointArraySize", nn, m_points);
         }
     }
 

@@ -1,7 +1,7 @@
 //! @file ReactorBase.cpp
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/zeroD/ReactorBase.h"
 #include "cantera/zeroD/FlowDevice.h"
@@ -47,14 +47,16 @@ void ReactorBase::syncState()
 void ReactorBase::addInlet(FlowDevice& inlet)
 {
     m_inlet.push_back(&inlet);
+    m_mdot_in.push_back(0.0);
 }
 
 void ReactorBase::addOutlet(FlowDevice& outlet)
 {
     m_outlet.push_back(&outlet);
+    m_mdot_out.push_back(0.0);
 }
 
-void ReactorBase::addWall(Wall& w, int lr)
+void ReactorBase::addWall(WallBase& w, int lr)
 {
     m_wall.push_back(&w);
     if (lr == 0) {
@@ -64,7 +66,7 @@ void ReactorBase::addWall(Wall& w, int lr)
     }
 }
 
-Wall& ReactorBase::wall(size_t n)
+WallBase& ReactorBase::wall(size_t n)
 {
     return *m_wall[n];
 }

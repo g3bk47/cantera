@@ -1,5 +1,5 @@
 ! This file is part of Cantera. See License.txt in the top-level directory or
-! at http://www.cantera.org/license.txt for license and copyright information.
+! at https://cantera.org/license.txt for license and copyright information.
 
 module fct
 interface
@@ -122,6 +122,11 @@ interface
         integer, intent(in) :: k
         integer, intent(in) :: m
     end function phase_natoms
+
+    integer function th_newfromfile(filename, id)
+        character*(*), intent(in) :: filename
+        character*(*), intent(in) :: id
+    end function th_newfromfile
 
     integer function newthermofromxml(mxml)
         integer, intent(in) :: mxml
@@ -253,6 +258,16 @@ interface
         double precision, intent(out) :: cp_r(*)
     end function th_getcp_r
 
+    integer function kin_newfromfile(filename, id, reactingPhase, neighbor1, neighbor2, neighbor3, neighbor4)
+        character*(*), intent(in) :: filename
+        character*(*), intent(in) :: id
+        integer, intent(in) :: reactingPhase
+        integer, intent(in) :: neighbor1
+        integer, intent(in) :: neighbor2
+        integer, intent(in) :: neighbor3
+        integer, intent(in) :: neighbor4
+    end function kin_newfromfile
+
     integer function newkineticsfromxml(mxml, iphase, neighbor1, neighbor2, neighbor3, neighbor4)
         integer, intent(in) :: mxml
         integer, intent(in) :: iphase
@@ -379,6 +394,11 @@ interface
         integer, intent(in) :: ith
         integer, intent(in) :: loglevel
     end function newtransport
+
+    integer function trans_newdefault(ith, loglevel)
+        integer, intent(in) :: ith
+        integer, intent(in) :: loglevel
+    end function trans_newdefault
 
     double precision function trans_viscosity(n)
         integer, intent(in) :: n

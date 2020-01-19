@@ -1,5 +1,5 @@
 ! This file is part of Cantera. See License.txt in the top-level directory or
-! at http://www.cantera.org/license.txt for license and copyright information.
+! at https://cantera.org/license.txt for license and copyright information.
 
 module cantera_thermo
 
@@ -34,6 +34,25 @@ module cantera_thermo
 !  integer, parameter :: VS = -107
 
 contains
+
+    type(phase_t) function ctthermo_newFromFile(filename, id)
+      implicit none
+      character*(*), intent(in) :: filename
+      character*(*), intent(in), optional :: id
+      type(phase_t) :: self
+      if (present(id)) then
+         self%thermo_id = th_newfromfile(filename, id)
+      else
+         self%thermo_id = th_newfromfile(filename, '')
+      end if
+      self%nel = phase_nelements(self%thermo_id)
+      self%nsp = phase_nspecies(self%thermo_id)
+      self%nrxn = 0
+      self%err = 0
+      self%kin_id = -1
+      self%tran_id = -1
+      ctthermo_newFromFile = self
+    end function ctthermo_newFromFile
 
     type(phase_t) function newThermoPhase(xml_phase, index)
       implicit none

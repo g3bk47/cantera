@@ -1,7 +1,7 @@
 //! @file TransportFactory.cpp Implementation file for class TransportFactory.
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 // known transport models
 #include "cantera/transport/MultiTransport.h"
@@ -26,6 +26,7 @@ TransportFactory* TransportFactory::s_factory = 0;
 std::mutex TransportFactory::transport_mutex;
 
 //! Exception thrown if an error is encountered while reading the transport database
+//! @deprecated Unused. To be removed after Cantera 2.5.
 class TransportDBError : public CanteraError
 {
 public:
@@ -36,6 +37,8 @@ public:
      */
     TransportDBError(size_t linenum, const std::string& msg) :
         CanteraError("getTransportData", "error reading transport data: " + msg + "\n") {
+            warn_deprecated("class TransportDBError",
+                "Unused. To be removed after Cantera 2.5.");
     }
 };
 
@@ -46,15 +49,21 @@ TransportFactory::TransportFactory()
     reg("", []() { return new Transport(); });
     m_synonyms["None"] = "";
     reg("UnityLewis", []() { return new UnityLewisTransport(); });
+    m_synonyms["unity-Lewis-number"] = "UnityLewis";
     reg("Mix", []() { return new MixTransport(); });
+    m_synonyms["mixture-averaged"] = "Mix";
+    m_synonyms["CK_Mix"] = m_synonyms["mixture-averaged-CK"] = "Mix";
     reg("Multi", []() { return new MultiTransport(); });
+    m_synonyms["multicomponent"] = "Multi";
+    m_synonyms["CK_Multi"] = m_synonyms["multicomponent-CK"] = "Multi";
     reg("Ion", []() { return new IonGasTransport(); });
+    m_synonyms["ionized-gas"] = "Ion";
     reg("Water", []() { return new WaterTransport(); });
-    m_synonyms["CK_Mix"] = "Mix";
-    m_synonyms["CK_Multi"] = "Multi";
+    m_synonyms["water"] = "Water";
     reg("HighP", []() { return new HighPressureGasTransport(); });
-    m_CK_mode["CK_Mix"] = true;
-    m_CK_mode["CK_Multi"] = true;
+    m_synonyms["high-pressure"] = "HighP";
+    m_CK_mode["CK_Mix"] = m_CK_mode["mixture-averaged-CK"] = true;
+    m_CK_mode["CK_Multi"] = m_CK_mode["multicomponent-CK"] = true;
 }
 
 void TransportFactory::deleteFactory()
@@ -90,7 +99,10 @@ Transport* TransportFactory::newTransport(thermo_t* phase, int log_level)
 {
     std::string transportModel = "None";
     XML_Node& phaseNode = phase->xml();
-    if (phaseNode.hasChild("transport")) {
+    AnyMap& input = phase->input();
+    if (input.hasKey("transport")) {
+        transportModel = input["transport"].asString();
+    } else if (phaseNode.hasChild("transport")) {
         transportModel = phaseNode.child("transport").attrib("model");
     }
     return newTransport(transportModel, phase,log_level);

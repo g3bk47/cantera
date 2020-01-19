@@ -7,7 +7,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_MASKELLSOLIDSOLNPHASE_H
 #define CT_MASKELLSOLIDSOLNPHASE_H
@@ -33,6 +33,7 @@ public:
         return "MaskellSolidsoln";
     }
 
+    virtual Units standardConcentrationUnits() const { return Units(1.0); }
     virtual void getActivityConcentrations(doublereal* c) const;
     virtual doublereal standardConcentration(size_t k=0) const { return 1.0; }
     virtual doublereal logStandardConc(size_t k=0) const { return 0.0; }
@@ -49,7 +50,7 @@ public:
      * In this equation of state implementation, the density is a function only
      * of the mole fractions. Therefore, it can't be an independent variable.
      * Instead, the pressure is used as the independent variable. Functions
-     * which try to set the thermodynamic state by calling setDensity() may
+     * which try to set the thermodynamic state by calling setDensity() will
      * cause an exception to be thrown.
      */
     //@{
@@ -79,6 +80,8 @@ public:
      * This function will now throw an error condition
      *
      * @param rho  Input density
+     * @deprecated Functionality merged with base function after Cantera 2.5.
+     *             (superseded by isCompressible check in Phase::setDensity)
      */
     virtual void setDensity(const doublereal rho);
 
@@ -91,6 +94,8 @@ public:
      * This function will now throw an error condition.
      *
      * @param rho   Input Density
+     * @deprecated Functionality merged with base function after Cantera 2.5.
+     *             (superseded by isCompressible check in Phase::setDensity)
      */
     virtual void setMolarDensity(const doublereal rho);
 
@@ -120,6 +125,7 @@ public:
     /// @name Utility Functions
     //@{
 
+    virtual void initThermo();
     virtual void initThermoXML(XML_Node& phaseNode, const std::string& id);
 
     void set_h_mix(const doublereal hmix) { h_mixing = hmix; }

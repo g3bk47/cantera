@@ -1,5 +1,5 @@
 # This file is part of Cantera. See License.txt in the top-level directory or
-# at http://www.cantera.org/license.txt for license and copyright information.
+# at https://cantera.org/license.txt for license and copyright information.
 
 cdef extern from "cantera/kinetics/reaction_defs.h" namespace "Cantera":
     cdef int ELEMENTARY_RXN
@@ -9,10 +9,6 @@ cdef extern from "cantera/kinetics/reaction_defs.h" namespace "Cantera":
     cdef int CHEBYSHEV_RXN
     cdef int CHEMACT_RXN
     cdef int INTERFACE_RXN
-
-    cdef int SIMPLE_FALLOFF
-    cdef int TROE_FALLOFF
-    cdef int SRI_FALLOFF
 
 
 cdef class Reaction:
@@ -79,10 +75,28 @@ cdef class Reaction:
         return wrapReaction(cxx_reaction)
 
     @staticmethod
-    def listFromFile(filename):
+    def fromYaml(text, Kinetics kinetics):
+        """
+        Create a `Reaction` object from its YAML string representation.
+
+        :param text:
+            The YAML reaction string
+        :param kinetics:
+            A `Kinetics` object whose associated phase(s) contain the species
+            involved in the reaction.
+        """
+        cxx_reaction = CxxNewReaction(AnyMapFromYamlString(stringify(text)),
+                                      deref(kinetics.kinetics))
+        return wrapReaction(cxx_reaction)
+
+    @staticmethod
+    def listFromFile(filename, Kinetics kinetics=None, section='reactions'):
         """
         Create a list of Reaction objects from all of the reactions defined in a
-        CTI or XML file.
+        YAML, CTI, or XML file.
+
+        For YAML input files, a `Kinetics` object is required as the second
+        argument, and reactions from the section *section* will be returned.
 
         Directories on Cantera's input file path will be searched for the
         specified file.
@@ -91,7 +105,14 @@ cdef class Reaction:
         children of the ``<reactionsData>`` node in a document with a ``<ctml>``
         root node, as in the XML files produced by conversion from CTI files.
         """
-        cxx_reactions = CxxGetReactions(deref(CxxGetXmlFile(stringify(filename))))
+        if filename.lower().split('.')[-1] in ('yml', 'yaml'):
+            if kinetics is None:
+                raise ValueError("A Kinetics object is required.")
+            root = AnyMapFromYamlFile(stringify(filename))
+            cxx_reactions = CxxGetReactions(root[stringify(section)],
+                                            deref(kinetics.kinetics))
+        else:
+            cxx_reactions = CxxGetReactions(deref(CxxGetXmlFile(stringify(filename))))
         return [wrapReaction(r) for r in cxx_reactions]
 
     @staticmethod
@@ -114,6 +135,17 @@ cdef class Reaction:
         # Currently identical to listFromXml since get_XML_from_string is able
         # to distinguish between CTI and XML.
         cxx_reactions = CxxGetReactions(deref(CxxGetXmlFromString(stringify(text))))
+        return [wrapReaction(r) for r in cxx_reactions]
+
+    @staticmethod
+    def listFromYaml(text, Kinetics kinetics):
+        """
+        Create a list of `Reaction` objects from all the reactions defined in a
+        YAML string.
+        """
+        root = AnyMapFromYamlString(stringify(text))
+        cxx_reactions = CxxGetReactions(root[stringify("items")],
+                                        deref(kinetics.kinetics))
         return [wrapReaction(r) for r in cxx_reactions]
 
     property reactant_string:
@@ -386,7 +418,7 @@ cdef class Falloff:
     :param init:
         Used internally when wrapping :ct:`Falloff` objects returned from C++.
     """
-    falloff_type = SIMPLE_FALLOFF
+    falloff_type = "Lindemann"
 
     def __cinit__(self, params=(), init=True):
         if not init:
@@ -395,21 +427,13 @@ cdef class Falloff:
         cdef vector[double] c
         for p in params:
             c.push_back(p)
-        self._falloff = CxxNewFalloff(self.falloff_type, c)
+        self._falloff = CxxNewFalloff(stringify(self.falloff_type), c)
         self.falloff = self._falloff.get()
 
     property type:
         """ A string defining the type of the falloff parameterization """
         def __get__(self):
-            cdef int falloff_type = self.falloff.getType()
-            if falloff_type == SIMPLE_FALLOFF:
-                return "Simple"
-            elif falloff_type == TROE_FALLOFF:
-                return "Troe"
-            elif falloff_type == SRI_FALLOFF:
-                return "SRI"
-            else:
-                return "unknown"
+            return pystr(self.falloff.type())
 
     property parameters:
         """ The array of parameters used to define this falloff function. """
@@ -438,7 +462,7 @@ cdef class TroeFalloff(Falloff):
         An array of 3 or 4 parameters: :math:`[a, T^{***}, T^*, T^{**}]` where
         the final parameter is optional (with a default value of 0).
     """
-    falloff_type = TROE_FALLOFF
+    falloff_type = "Troe"
 
 
 cdef class SriFalloff(Falloff):
@@ -450,16 +474,16 @@ cdef class SriFalloff(Falloff):
         two parameters are optional (with default values of 1 and 0,
         respectively).
     """
-    falloff_type = SRI_FALLOFF
+    falloff_type = "SRI"
 
 
 cdef wrapFalloff(shared_ptr[CxxFalloff] falloff):
-    cdef int falloff_type = falloff.get().getType()
-    if falloff_type == SIMPLE_FALLOFF:
+    falloff_type = pystr(falloff.get().type())
+    if falloff_type in ["Lindemann", "Simple"]:
         f = Falloff(init=False)
-    elif falloff_type == TROE_FALLOFF:
+    elif falloff_type == "Troe":
         f = TroeFalloff(init=False)
-    elif falloff_type == SRI_FALLOFF:
+    elif falloff_type == "SRI":
         f = SriFalloff(init=False)
     else:
         warnings.warn('Unknown falloff type: {0}'.format(falloff_type))

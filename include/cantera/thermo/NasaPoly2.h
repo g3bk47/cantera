@@ -9,7 +9,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_NASAPOLY2_H
 #define CT_NASAPOLY2_H
@@ -48,7 +48,9 @@ namespace Cantera
 class NasaPoly2 : public SpeciesThermoInterpType
 {
 public:
-    //! Full Constructor
+    NasaPoly2();
+
+    //! Constructor with all input data
     /*!
      * @param tlow      output - Minimum temperature
      * @param thigh     output - Maximum temperature
@@ -65,6 +67,30 @@ public:
         mnp_low(tlow, coeffs[0], pref, coeffs + 8),
         mnp_high(coeffs[0], thigh, pref, coeffs + 1) {
     }
+
+    virtual void setMinTemp(double Tmin) {
+        SpeciesThermoInterpType::setMinTemp(Tmin);
+        mnp_low.setMinTemp(Tmin);
+    }
+
+    virtual void setMaxTemp(double Tmax) {
+        SpeciesThermoInterpType::setMaxTemp(Tmax);
+        mnp_high.setMaxTemp(Tmax);
+    }
+
+    virtual void setRefPressure(double Pref) {
+        SpeciesThermoInterpType::setRefPressure(Pref);
+        mnp_low.setRefPressure(Pref);
+        mnp_high.setRefPressure(Pref);
+    }
+
+    /*!
+     * @param Tmid  Temperature [K] at the boundary between the low and high
+     *              temperature polynomials
+     * @param low   Vector of 7 coefficients for the low temperature polynomial
+     * @param high  Vector of 7 coefficients for the high temperature polynomial
+     */
+    void setParameters(double Tmid, const vector_fp& low, const vector_fp& high);
 
     virtual int reportType() const {
         return NASA2;
@@ -96,6 +122,8 @@ public:
             mnp_high.updatePropertiesTemp(temp, cp_R, h_RT, s_R);
         }
     }
+
+    size_t nCoeffs() const { return 15; }
 
     void reportParameters(size_t& n, int& type,
                           doublereal& tlow, doublereal& thigh,

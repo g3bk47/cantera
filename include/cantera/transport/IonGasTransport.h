@@ -3,7 +3,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_ION_GAS_TRANSPORT_H
 #define CT_ION_GAS_TRANSPORT_H
@@ -14,10 +14,10 @@ namespace Cantera
 {
 //! Class IonGasTransport implements Stockmayer-(n,6,4) model for transport of ions.
 /*!
- * As implemented here, only binary transport between netrals and ions is considered
+ * As implemented here, only binary transport between neutrals and ions is considered
  * for calculating mixture-average diffusion coefficients and mobilities. When
  * polarizability is not provide for an ion, LJ model is used instead of n64 model.
- * Only neutral species are considered for thermal conductivity and viscousity.
+ * Only neutral species are considered for thermal conductivity and viscosity.
  *
  * References for Stockmayer-(n,6,4) model:
  *
@@ -62,7 +62,7 @@ public:
     virtual double viscosity();
 
     //! Returns the mixture thermal conductivity (W/m/K).
-    //! Only Neutral species contribute to therrmal conductivity.
+    //! Only Neutral species contribute to thermal conductivity.
     virtual double thermalConductivity();
 
     //! The mobilities for ions in gas.

@@ -1,6 +1,6 @@
 
 -----------------------------------
-       Cantera C++ examples        
+       Cantera C++ examples
 -----------------------------------
 
 
@@ -8,9 +8,9 @@
 
 >>>>>  example 1
 
-Description:  
-Ignition simulation using class IdealGasMix with file gri30.cti.
-Constant-pressure ignition of a hydrogen/oxygen/nitrogen mixture 
+Description:
+Ignition simulation using class IdealGasPhase with file gri30.yaml.
+Constant-pressure ignition of a hydrogen/oxygen/nitrogen mixture
 beginning at T = 1001 K and P = 1 atm.
  Tfinal = 2663.78
 Output files:
@@ -22,9 +22,9 @@ Output files:
 
 >>>>>  example 2
 
-Description:  
-Ignition simulation using class IdealGasMix with file gri30.cti.
-Constant-pressure ignition of a hydrogen/oxygen/nitrogen mixture 
+Description:
+Ignition simulation using class IdealGasPhase with file gri30.yaml.
+Constant-pressure ignition of a hydrogen/oxygen/nitrogen mixture
 beginning at T = 1001 K and P = 1 atm.
  Tfinal = 2663.78
 Output files:
@@ -36,45 +36,40 @@ Output files:
 
 >>>>>  example 3
 
-Description:  
+Description:
 Chemical equilibrium.
 Equilibrium composition and pressure for a range of temperatures at constant density.
 
-
-**** WARNING ****
+CanteraWarning: NasaPoly2::validate:
 For species SI2H6, discontinuity in h/RT detected at Tmid = 1000
-	Value computed using low-temperature polynomial:  19.8328
-	Value computed using high-temperature polynomial: 19.9055
+        Value computed using low-temperature polynomial:  19.8328
+        Value computed using high-temperature polynomial: 19.9055
 
-
-**** WARNING ****
+CanteraWarning: NasaPoly2::validate:
 For species SI2H6, discontinuity in s/R detected at Tmid = 1000
-	Value computed using low-temperature polynomial:  49.5493
-	Value computed using high-temperature polynomial: 49.7214
+        Value computed using low-temperature polynomial:  49.5493
+        Value computed using high-temperature polynomial: 49.7214
 
-
-**** WARNING ****
+CanteraWarning: NasaPoly2::validate:
 For species SI3H8, discontinuity in h/RT detected at Tmid = 1000
-	Value computed using low-temperature polynomial:  29.3028
-	Value computed using high-temperature polynomial: 29.4297
+        Value computed using low-temperature polynomial:  29.3028
+        Value computed using high-temperature polynomial: 29.4297
 
-
-**** WARNING ****
+CanteraWarning: NasaPoly2::validate:
 For species SI3H8, discontinuity in s/R detected at Tmid = 1000
-	Value computed using low-temperature polynomial:  65.9731
-	Value computed using high-temperature polynomial: 66.2781
+        Value computed using low-temperature polynomial:  65.9731
+        Value computed using high-temperature polynomial: 66.2781
 
-
-**** WARNING ****
+CanteraWarning: NasaPoly2::validate:
 For species SI2, discontinuity in h/RT detected at Tmid = 1000
-	Value computed using low-temperature polynomial:  74.0115
-	Value computed using high-temperature polynomial: 74.0387
+        Value computed using low-temperature polynomial:  74.0115
+        Value computed using high-temperature polynomial: 74.0387
 
-
-**** WARNING ****
+CanteraWarning: NasaPoly2::validate:
 For species SI2, discontinuity in s/R detected at Tmid = 1000
-	Value computed using low-temperature polynomial:  32.8813
-	Value computed using high-temperature polynomial: 32.9489
+        Value computed using low-temperature polynomial:  32.8813
+        Value computed using high-temperature polynomial: 32.9489
+
 Output files:
   eq1.csv    (Excel CSV file)
   eq1.dat    (Tecplot data file)
@@ -82,9 +77,9 @@ Output files:
 
 
 
->>>>>  example 5
+>>>>>  example 4
 
-Description:  
+Description:
 Mixture-averaged transport properties.
 Viscosity, thermal conductivity, and mixture-averaged
 diffusion coefficients at 2 atm for a range of temperatures
@@ -95,9 +90,9 @@ Output files:
 
 
 
->>>>>  example 6
+>>>>>  example 5
 
-Description:  
+Description:
 Multicomponent transport properties.
 Viscosity, thermal conductivity, and thermal diffusion
  coefficients at 2 atm for a range of temperatures

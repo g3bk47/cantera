@@ -185,7 +185,7 @@ class KineticsFromReactions(utilities.CanteraTest):
 
         surf2 = ct.Interface(thermo='Surface', kinetics='interface',
                              species=surf_species, reactions=reactions,
-                             phases=[gas])
+                             adjacent=[gas])
         surf1.site_density = surf2.site_density = 5e-9
         gas.TP = surf2.TP = surf1.TP = 900, 2*ct.one_atm
         surf2.concentrations = surf1.concentrations
@@ -652,16 +652,16 @@ class TestSofcKinetics(utilities.CanteraTest):
 
         # These values are just a regression test with no theoretical basis
         self.assertArrayNear(anode_surf.coverages,
-                             [6.18736755e-01, 3.81123779e-01, 8.63037850e-05,
-                              2.59274708e-06, 5.05702339e-05], 1e-7)
+                             [6.18736878e-01, 3.81123655e-01, 8.6303646e-05,
+                              2.59274203e-06, 5.05700981e-05], 1e-7)
         self.assertArrayNear(oxide_surf_a.coverages,
-                             [4.99435780e-02, 9.48927983e-01, 1.12840577e-03,
+                             [4.99435780e-02, 9.48927983e-01, 1.12840418e-03,
                               3.35936530e-08], 1e-7)
         self.assertArrayNear(cathode_surf.coverages,
                              [1.48180380e-07, 7.57234727e-14, 9.99999827e-01,
                               2.49235513e-08, 4.03296469e-13], 1e-7)
         self.assertArrayNear(oxide_surf_c.coverages,
-                             [4.99896947e-02, 9.49804199e-01, 2.06104969e-04,
+                             [4.99896947e-02, 9.49804199e-01, 2.06104679e-04,
                               1.11970271e-09], 1e-7)
 
         Ea0 = newton_solve(anode_curr, xstart=-0.51)
@@ -767,6 +767,23 @@ class TestReaction(utilities.CanteraTest):
         self.assertEqual(r.efficiencies['H2O'], 15.4)
         self.assertEqual(r.rate.temperature_exponent, -1.0)
 
+    def test_fromYaml(self):
+        r = ct.Reaction.fromYaml(
+                "{equation: 2 O + M <=> O2 + M,"
+                " type: three-body,"
+                " rate-constant: {A: 1.2e+11, b: -1.0, Ea: 0.0},"
+                " efficiencies: {H2: 2.4, H2O: 15.4, AR: 0.83}}",
+                self.gas)
+
+        self.assertTrue(isinstance(r, ct.ThreeBodyReaction))
+        self.assertEqual(r.reactants['O'], 2)
+        self.assertEqual(r.products['O2'], 1)
+        self.assertEqual(r.efficiencies['H2O'], 15.4)
+        self.assertEqual(r.rate.temperature_exponent, -1.0)
+        self.assertIn('O', r)
+        self.assertIn('O2', r)
+        self.assertNotIn('H2O', r)
+
     def test_listFromFile(self):
         R = ct.Reaction.listFromFile('h2o2.xml')
         eq1 = [r.equation for r in R]
@@ -788,6 +805,20 @@ class TestReaction(utilities.CanteraTest):
         eq1 = [r.equation for r in R]
         eq2 = [r.equation for r in self.gas.reactions()]
         self.assertEqual(eq1, eq2)
+
+    def test_listFromYaml(self):
+        yaml = """
+            - equation: O + H2 <=> H + OH  # Reaction 3
+              rate-constant: {A: 3.87e+04, b: 2.7, Ea: 6260.0}
+            - equation: O + HO2 <=> OH + O2  # Reaction 4
+              rate-constant: {A: 2.0e+13, b: 0.0, Ea: 0.0}
+            - equation: O + H2O2 <=> OH + HO2  # Reaction 5
+              rate-constant: {A: 9.63e+06, b: 2.0, Ea: 4000.0}
+        """
+        R = ct.Reaction.listFromYaml(yaml, self.gas)
+        self.assertEqual(len(R), 3)
+        self.assertIn('HO2', R[2].products)
+        self.assertEqual(R[0].rate.temperature_exponent, 2.7)
 
     def test_elementary(self):
         r = ct.ElementaryReaction({'O':1, 'H2':1}, {'H':1, 'OH':1})
@@ -844,6 +875,7 @@ class TestReaction(utilities.CanteraTest):
         r.low_rate = ct.Arrhenius(2.3e12, -0.9, -1700*1000*4.184)
         r.falloff = ct.TroeFalloff((0.7346, 94, 1756, 5182))
         r.efficiencies = {'AR':0.7, 'H2':2.0, 'H2O':6.0}
+        self.assertEqual(r.falloff.type, "Troe")
 
         gas2 = ct.Solution(thermo='IdealGas', kinetics='GasKinetics',
                            species=self.species, reactions=[r])
@@ -912,12 +944,81 @@ class TestReaction(utilities.CanteraTest):
             self.assertNear(gas2.net_rates_of_progress[0],
                             gas1.net_rates_of_progress[4])
 
+    def test_chebyshev_single_P(self):
+        species = ct.Species.listFromFile('pdep-test.cti')
+        r = ct.ChebyshevReaction()
+        r.reactants = 'R5:1, H:1'
+        r.products = 'P5A:1, P5B:1'
+        r.set_parameters(Tmin=300.0, Tmax=2000.0, Pmin=1000, Pmax=10000000,
+            coeffs=[[ 5.28830e+00],
+                    [ 1.97640e+00],
+                    [ 3.17700e-01],
+                    [-3.12850e-02]])
+
+        gas = ct.Solution(thermo='IdealGas', kinetics='GasKinetics',
+                          species=species, reactions=[r])
+
+        # rate constant should be pressure independent
+        for T in [300, 500, 1500]:
+            gas.TP = T, 1e4
+            k1 = gas.forward_rate_constants[0]
+            gas.TP = T, 1e6
+            k2 = gas.forward_rate_constants[0]
+            self.assertNear(k1, k2)
+
+    def test_chebyshev_single_T(self):
+        species = ct.Species.listFromFile('pdep-test.cti')
+        r = ct.ChebyshevReaction()
+        r.reactants = 'R5:1, H:1'
+        r.products = 'P5A:1, P5B:1'
+        r.set_parameters(Tmin=300.0, Tmax=2000.0, Pmin=1000, Pmax=10000000,
+            coeffs=[[ 5.28830e+00, -1.13970e+00, -1.20590e-01,  1.60340e-02]])
+
+        gas = ct.Solution(thermo='IdealGas', kinetics='GasKinetics',
+                          species=species, reactions=[r])
+
+        # rate constant should be temperature independent
+        for P in [1e4, 2e5, 8e6]:
+            gas.TP = 400, P
+            k1 = gas.forward_rate_constants[0]
+            gas.TP = 1700, P
+            k2 = gas.forward_rate_constants[0]
+            self.assertNear(k1, k2)
+
     def test_chebyshev_rate(self):
         gas1 = ct.Solution('pdep-test.cti')
         gas1.TP = 800, 2*ct.one_atm
         for i in range(4,6):
             self.assertNear(gas1.reaction(i)(gas1.T, gas1.P),
                             gas1.forward_rate_constants[i])
+
+    def test_chebyshev_bad_shape_cti(self):
+        with self.assertRaisesRegex(ct.CanteraError, "same number"):
+            r = ct.Reaction.fromCti('''
+                chebyshev_reaction('R5 + H (+ M) <=> P5A + P5B (+M)',
+                   Tmin=300.0, Tmax=2000.0,
+                   Pmin=(0.00986, 'atm'), Pmax=(98.6, 'atm'),
+                   coeffs=[[ 8.28830e+00, -1.13970e+00, -1.20590e-01],
+                           [ 1.97640e+00,  1.00370e+00,  7.28650e-03, -3.04320e-02],
+                           [ 3.17700e-01,  2.68890e-01,  9.48060e-02, -7.63850e-03],
+                           [-3.12850e-02, -3.94120e-02,  4.43750e-02,  1.44580e-02]])''')
+
+    def test_chebyshev_bad_shape_yaml(self):
+        species = ct.Species.listFromFile('pdep-test.xml')
+        gas = ct.Solution(thermo='IdealGas', kinetics='GasKinetics',
+                          species=species, reactions=[])
+
+        with self.assertRaisesRegex(ct.CanteraError, "Inconsistent"):
+            r = ct.Reaction.fromYaml('''
+                equation: R5 + H (+ M) <=> P5A + P5B (+M)
+                type: Chebyshev
+                temperature-range: [300.0, 2000.0]
+                pressure-range: [9.86e-03 atm, 98.6 atm]
+                data:
+                - [8.2883, -1.1397, -0.12059, 0.016034]
+                - [1.9764, 1.0037, 7.2865e-03]
+                - [0.3177, 0.26889, 0.094806, -7.6385e-03]
+                - [-0.031285, -0.039412, 0.044375, 0.014458]''', gas)
 
     def test_interface(self):
         surf_species = ct.Species.listFromFile('ptcombust.xml')
@@ -932,7 +1033,7 @@ class TestReaction(utilities.CanteraTest):
         self.assertNear(r1.coverage_deps['H(S)'][2], -6e6)
 
         surf2 = ct.Interface(thermo='Surface', species=surf_species,
-                             kinetics='interface', reactions=[r1], phases=[gas])
+                             kinetics='interface', reactions=[r1], adjacent=[gas])
 
         surf2.site_density = surf1.site_density
         surf1.coverages = surf2.coverages = 'PT(S):0.7, H(S):0.3'
@@ -999,9 +1100,12 @@ class TestReaction(utilities.CanteraTest):
     def test_modify_falloff(self):
         gas = ct.Solution('gri30.xml')
         gas.TPX = 1100, 3 * ct.one_atm, 'CH4:1.0, O2:0.4, CO2:0.1, H2O:0.05'
+        r0 = gas.reaction(11)
+        self.assertEqual(r0.falloff.type, "Lindemann")
         # these two reactions happen to have the same third-body efficiencies
         r1 = gas.reaction(49)
         r2 = gas.reaction(53)
+        self.assertEqual(r2.falloff.type, "Troe")
         self.assertEqual(r1.efficiencies, r2.efficiencies)
         r2.high_rate = r1.high_rate
         r2.low_rate = r1.low_rate

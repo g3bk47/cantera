@@ -59,6 +59,7 @@ if 'clean' in COMMAND_LINE_TARGETS:
     removeDirectory('build')
     removeDirectory('stage')
     removeDirectory('.sconf_temp')
+    removeDirectory('test/work')
     removeFile('.sconsign.dblite')
     removeFile('include/cantera/base/config.h')
     removeFile('src/pch/system.h.gch')
@@ -78,6 +79,7 @@ if 'clean' in COMMAND_LINE_TARGETS:
     for name in os.listdir('interfaces/cython/cantera/data/'):
         if name != '__init__.py':
             removeFile('interfaces/cython/cantera/data/' + name)
+    removeDirectory('interfaces/cython/cantera/test/data/test_subdir')
     for name in os.listdir('interfaces/cython/cantera/test/data/'):
         if name != '__init__.py':
             removeFile('interfaces/cython/cantera/test/data/' + name)
@@ -253,7 +255,15 @@ defaults.noDebugLinkFlags = ''
 defaults.warningFlags = '-Wall'
 defaults.buildPch = False
 env['pch_flags'] = []
-env['openmp_flag'] = '-fopenmp' # used to generate sample build scripts
+env['openmp_flag'] = ['-fopenmp'] # used to generate sample build scripts
+
+env['using_apple_clang'] = False
+# Check if this is actually Apple's clang on macOS
+if env['OS'] == 'Darwin':
+    result = subprocess.check_output([env.subst('$CC'), '--version']).decode('utf-8')
+    if 'clang' in result.lower() and result.startswith('Apple LLVM'):
+        env['using_apple_clang'] = True
+        env['openmp_flag'].insert(0, '-Xpreprocessor')
 
 if 'gcc' in env.subst('$CC') or 'gnu-cc' in env.subst('$CC'):
     defaults.optimizeCcFlags += ' -Wno-inline'
@@ -276,13 +286,13 @@ elif env['CC'] == 'cl': # Visual Studio
     defaults.warningFlags = '/W3'
     defaults.buildPch = True
     env['pch_flags'] = ['/FIpch/system.h']
-    env['openmp_flag'] = '/openmp'
+    env['openmp_flag'] = ['/openmp']
 
 elif 'icc' in env.subst('$CC'):
     defaults.cxxFlags = '-std=c++0x'
     defaults.ccFlags = '-vec-report0 -diag-disable 1478'
     defaults.warningFlags = '-Wcheck'
-    env['openmp_flag'] = '-openmp'
+    env['openmp_flag'] = ['-openmp']
 
 elif 'clang' in env.subst('$CC'):
     defaults.ccFlags = '-fcolor-diagnostics'
@@ -325,6 +335,14 @@ config_options = [
         'prefix',
         'Set this to the directory where Cantera should be installed.',
         defaults.prefix, PathVariable.PathAccept),
+    PathVariable(
+        'libdirname',
+        """Set this to the directory where Cantera libraries should be installed.
+           Some distributions (e.g. Fedora/RHEL) use 'lib64' instead of 'lib' on 64-bit systems
+           or could use some other library directory name instead of 'lib' depends
+           on architecture and profile (e.g. Gentoo 'libx32' on x32 profile).
+           If user didn't set 'libdirname' configuration variable set it to default value 'lib'""",
+        'lib', PathVariable.PathAccept),
     EnumVariable(
         'python_package',
         """If you plan to work in Python, then you need the ``full`` Cantera Python
@@ -431,6 +449,14 @@ config_options = [
         """Select whether to use the fmt library from a system installation
            ('y'), from a Git submodule ('n'), or to decide automatically
            ('default').""",
+        'default', ('default', 'y', 'n')),
+    EnumVariable(
+        'system_yamlcpp',
+        """Select whether to use the yaml-cpp library from a system installation
+           ('y'), from a Git submodule ('n'), or to decide automatically
+           ('default'). If yaml-cpp is not installed directly into system
+           include and library directories, then you will need to add those
+           directories to 'extra_inc_dirs' and 'extra_lib_dirs'.""",
         'default', ('default', 'y', 'n')),
     EnumVariable(
         'system_sundials',
@@ -625,7 +651,12 @@ config_options = [
            files in the subdirectory defined by 'prefix'. This layout is best
            with a prefix like '/opt/cantera'. 'debian' installs to the stage
            directory in a layout used for generating Debian packages.""",
-        defaults.fsLayout, ('standard','compact','debian'))
+        defaults.fsLayout, ('standard','compact','debian')),
+    BoolVariable(
+        "fast_fail_tests",
+        """If enabled, tests will exit at the first failure.""",
+        False,
+    )
 ]
 
 opts.AddVariables(*config_options)
@@ -683,7 +714,7 @@ for arg in ARGUMENTS:
         sys.exit(1)
 
 # Require a StrictVersion-compatible version
-env['cantera_version'] = "2.5.0a2"
+env['cantera_version'] = "2.5.0a3"
 ctversion = StrictVersion(env['cantera_version'])
 # For use where pre-release tags are not permitted (MSI, sonames)
 env['cantera_pure_version'] = '.'.join(str(x) for x in ctversion.version)
@@ -703,6 +734,11 @@ print()
 # ********************************************
 # *** Configure system-specific properties ***
 # ********************************************
+
+# Prevent setting prefix for Cantera installation to source directory
+if os.path.abspath(env['prefix']) == Dir('.').abspath:
+    print('ERROR: cannot install Cantera into source directory.')
+    exit(1)
 
 # Copy in external environment variables
 if env['env_vars'] == 'all':
@@ -900,6 +936,33 @@ elif env['system_googletest'] == 'y':
 elif env['system_googletest'] == 'n':
     env['googletest'] = 'submodule'
 
+# Check for yaml-cpp library and checkout submodule if needed
+if env['system_yamlcpp'] in ('y', 'default'):
+    if conf.CheckCXXHeader('yaml-cpp/yaml.h', '""'):
+        env['system_yamlcpp'] = True
+        print("""INFO: Using system installation of yaml-cpp library.""")
+
+    elif env['system_yamlcpp'] == 'y':
+        config_error('Expected system installation of yaml-cpp library, but it '
+            'could not be found.')
+
+if env['system_yamlcpp'] in ('n', 'default'):
+    env['system_yamlcpp'] = False
+    print("""INFO: Using private installation of yaml-cpp library.""")
+    if not os.path.exists('ext/yaml-cpp/include/yaml-cpp/yaml.h'):
+        if not os.path.exists('.git'):
+            config_error('yaml-cpp is missing. Install source in ext/yaml-cpp.')
+
+        try:
+            code = subprocess.call(['git', 'submodule', 'update', '--init',
+                                    '--recursive', 'ext/yaml-cpp'])
+        except Exception:
+            code = -1
+        if code:
+            config_error('yaml-cpp submodule checkout failed.\n'
+                         'Try manually checking out the submodule with:\n\n'
+                         '    git submodule update --init --recursive ext/yaml-cpp\n')
+
 # Check for googletest and checkout submodule if needed
 if env['googletest'] in ('system', 'default'):
     has_gtest = conf.CheckCXXHeader('gtest/gtest.h', '""')
@@ -980,26 +1043,35 @@ print('INFO: Found Boost version {0}'.format(env['BOOST_LIB_VERSION']))
 if not env['BOOST_LIB_VERSION']:
     config_error("Boost could not be found. Install Boost headers or set"
                  " 'boost_inc_dir' to point to the boost headers.")
+# demangle is availble in Boost 1.55 or newer
+env['has_demangle'] = conf.CheckDeclaration("boost::core::demangle",
+                                '#include <boost/core/demangle.hpp>', 'C++')
 
 import SCons.Conftest, SCons.SConf
 context = SCons.SConf.CheckContext(conf)
-ret = SCons.Conftest.CheckLib(context,
-                              ['sundials_cvodes'],
-                              header='#include "cvodes/cvodes.h"',
-                              language='C++',
-                              call='CVodeCreate(CV_BDF, CV_NEWTON);',
-                              autoadd=False,
-                              extra_libs=env['blas_lapack_libs'])
-if ret:
+
+# Check initially for Sundials<=3.2 and then for Sundials>=4.0
+for cvode_call in ['CVodeCreate(CV_BDF, CV_NEWTON);','CVodeCreate(CV_BDF);']:
+    ret = SCons.Conftest.CheckLib(context,
+                                  ['sundials_cvodes'],
+                                  header='#include "cvodes/cvodes.h"',
+                                  language='C++',
+                                  call=cvode_call,
+                                  autoadd=False,
+                                  extra_libs=env['blas_lapack_libs'])
     # CheckLib returns False to indicate success
+    if not ret:
+        if env['system_sundials'] == 'default':
+            env['system_sundials'] = 'y'
+        break
+
+# Execute if the cycle ends without 'break'
+else:
     if env['system_sundials'] == 'default':
         env['system_sundials'] = 'n'
     elif env['system_sundials'] == 'y':
         config_error('Expected system installation of Sundials, but it could '
                      'not be found.')
-elif env['system_sundials'] == 'default':
-    env['system_sundials'] = 'y'
-
 
 # Checkout Sundials submodule if needed
 if (env['system_sundials'] == 'n' and
@@ -1036,7 +1108,7 @@ if env['system_sundials'] == 'y':
 
     # Ignore the minor version, e.g. 2.4.x -> 2.4
     env['sundials_version'] = '.'.join(sundials_version.split('.')[:2])
-    if env['sundials_version'] not in ('2.4','2.5','2.6','2.7','3.0','3.1'):
+    if env['sundials_version'] not in ('2.4','2.5','2.6','2.7','3.0','3.1','3.2','4.0','4.1','5.0'):
         print("""ERROR: Sundials version %r is not supported.""" % env['sundials_version'])
         sys.exit(1)
     print("""INFO: Using system installation of Sundials version %s.""" % sundials_version)
@@ -1061,8 +1133,8 @@ if env['system_sundials'] == 'y':
         print('WARNING: External BLAS/LAPACK has been specified for Cantera '
               'but Sundials was built without this support.')
 else: # env['system_sundials'] == 'n'
-    print("""INFO: Using private installation of Sundials version 3.1.""")
-    env['sundials_version'] = '3.1'
+    print("""INFO: Using private installation of Sundials version 5.0.""")
+    env['sundials_version'] = '5.0'
     env['has_sundials_lapack'] = int(env['use_lapack'])
 
 
@@ -1133,7 +1205,8 @@ if env['VERBOSE']:
 env['python_cmd_esc'] = quoted(env['python_cmd'])
 
 # Python Package Settings
-python_min_version = LooseVersion('3.3')
+python_min_version = LooseVersion('3.5')
+# Note: cython_min_version is redefined below if the Python version is 3.8 or higher
 cython_min_version = LooseVersion('0.23')
 numpy_min_test_version = LooseVersion('1.8.1')
 
@@ -1226,6 +1299,15 @@ if env['python_package'] != 'none':
                 "Found {0} but {1} or newer is required".format(
                 python_version, python_min_version))
             warn_no_full_package = True
+        elif python_version >= LooseVersion("3.8"):
+            # Reset the minimum Cython version if the Python version is 3.8 or higher
+            # Due to internal changes in the CPython API, more recent versions of
+            # Cython are necessary to build for Python 3.8. There is nothing Cantera
+            # can do about this, the changes in CPython are handled by Cython. This
+            # version bump is used to produce a more useful/actionable error message
+            # for users than the compilation errors that result from using
+            # Cython < 0.29.12.
+            cython_min_version = LooseVersion("0.29.12")
 
         if numpy_version == LooseVersion('0.0.0'):
             print("NumPy not found.")
@@ -1298,12 +1380,6 @@ if env['matlab_toolbox'] == 'y':
 # **********************************************
 # *** Set additional configuration variables ***
 # **********************************************
-
-# Some distributions (e.g. Fedora/RHEL) use 'lib64' instead of 'lib' on 64-bit systems
-if any(name.startswith('/usr/lib64/python') for name in sys.path):
-    env['libdirname'] = 'lib64'
-else:
-    env['libdirname'] = 'lib'
 
 # On Debian-based systems, need to special-case installation to
 # /usr/local because of dist-packages vs site-packages
@@ -1436,11 +1512,13 @@ cdefine('LAPACK_NAMES_LOWERCASE', 'lapack_names', 'lower')
 cdefine('CT_USE_LAPACK', 'use_lapack')
 cdefine('CT_USE_SYSTEM_EIGEN', 'system_eigen')
 cdefine('CT_USE_SYSTEM_FMT', 'system_fmt')
+cdefine('CT_USE_SYSTEM_YAMLCPP', 'system_yamlcpp')
+cdefine('CT_USE_DEMANGLE', 'has_demangle')
 
 config_h_build = env.Command('build/src/config.h.build',
                              'include/cantera/base/config.h.in',
                        ConfigBuilder(configh))
-# This separate copy operation, which SCons will skip of config.h.build is
+# This separate copy operation, which SCons will skip if config.h.build is
 # unmodified, prevents unnecessary rebuilds of the precompiled header
 config_h = env.Command('include/cantera/base/config.h',
                        'build/src/config.h.build',
@@ -1501,12 +1579,15 @@ for cti in mglob(env, 'data/inputs', 'cti'):
     build(env.Command('build/data/%s' % outName, cti.path,
                       '$python_cmd_esc interfaces/cython/cantera/ctml_writer.py $SOURCE $TARGET'))
 
-
-# Copy input files which are not present as cti:
+# Copy XML input files which are not present as cti:
 for xml in mglob(env, 'data/inputs', 'xml'):
     dest = pjoin('build','data',xml.name)
     if xml.name not in convertedInputFiles:
         build(env.Command(dest, xml.path, Copy('$TARGET', '$SOURCE')))
+
+for yaml in mglob(env, "data", "yaml"):
+    dest = pjoin("build", "data", yaml.name)
+    build(env.Command(dest, yaml.path, Copy("$TARGET", "$SOURCE")))
 
 if addInstallActions:
     # Put headers in place
@@ -1514,7 +1595,7 @@ if addInstallActions:
     install(env.RecursiveInstall, '$inst_incdir', 'include/cantera')
 
     # Data files
-    install('$inst_datadir', mglob(env, 'build/data', 'cti', 'xml'))
+    install('$inst_datadir', mglob(env, 'build/data', 'cti', 'xml', 'yaml'))
 
 
 ### List of libraries needed to link to Cantera ###
@@ -1537,6 +1618,10 @@ else:
 
 linkLibs.extend(env['sundials_libs'])
 linkSharedLibs.extend(env['sundials_libs'])
+
+if env['system_yamlcpp']:
+    linkLibs.append('yaml-cpp')
+    linkSharedLibs.append('yaml-cpp')
 
 #  Add LAPACK and BLAS to the link line
 if env['blas_lapack_libs']:
@@ -1770,7 +1855,7 @@ if any(target.startswith('test') for target in COMMAND_LINE_TARGETS):
         test_py_int = env.Command('#build/python_local/cantera/__init__.py',
                                   '#interfaces/python_minimal/cantera/__init__.py',
                                   Copy('$TARGET', '$SOURCE'))
-        for script in ['ctml_writer', 'ck2cti']:
+        for script in ['ctml_writer', 'ck2cti', 'ck2yaml', 'ctml2yaml']:
             s = env.Command('#build/python_local/cantera/{}.py'.format(script),
                             '#interfaces/cython/cantera/{}.py'.format(script),
                             Copy('$TARGET', '$SOURCE'))

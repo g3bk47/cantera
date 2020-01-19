@@ -14,7 +14,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_GLOBAL_H
 #define CT_GLOBAL_H
@@ -186,6 +186,26 @@ void warn_deprecated(const std::string& method, const std::string& extra="");
 
 //! @copydoc Application::suppress_deprecation_warnings
 void suppress_deprecation_warnings();
+
+//! helper function passing user warning to global handler
+void _warn_user(const std::string& method, const std::string& extra);
+
+/*!
+ * Print a user warning raised from *method*.
+ *
+ * @param method  method name
+ * @param msg  Python-style format string with the following arguments
+ * @param args  arguments for the format string
+ */
+template <typename... Args>
+void warn_user(const std::string& method, const std::string& msg,
+               const Args&... args) {
+    if (sizeof...(args) == 0) {
+        _warn_user(method, msg);
+    } else {
+        _warn_user(method, fmt::format(msg, args...));
+    }
+}
 
 //! @copydoc Application::make_deprecation_warnings_fatal
 void make_deprecation_warnings_fatal();

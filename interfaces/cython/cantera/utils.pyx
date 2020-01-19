@@ -1,5 +1,5 @@
 # This file is part of Cantera. See License.txt in the top-level directory or
-# at http://www.cantera.org/license.txt for license and copyright information.
+# at https://cantera.org/license.txt for license and copyright information.
 
 import sys
 import os
@@ -39,6 +39,9 @@ def appdelete():
 
 def make_deprecation_warnings_fatal():
     Cxx_make_deprecation_warnings_fatal()
+
+def suppress_deprecation_warnings():
+    Cxx_suppress_deprecation_warnings()
 
 def suppress_thermo_warnings(pybool suppress=True):
     Cxx_suppress_thermo_warnings(suppress)

@@ -7,7 +7,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/thermo/VPStandardStateTP.h"
 #include "cantera/thermo/PDSS.h"
@@ -202,8 +202,7 @@ void VPStandardStateTP::setPressure(doublereal p)
 
 void VPStandardStateTP::calcDensity()
 {
-    throw NotImplementedError("VPStandardStateTP::calcDensity() called, "
-                              "but EOS for phase is not known");
+    throw NotImplementedError("VPStandardStateTP::calcDensity");
 }
 
 void VPStandardStateTP::setState_TP(doublereal t, doublereal pres)
@@ -230,9 +229,13 @@ void VPStandardStateTP::installPDSS(size_t k, unique_ptr<PDSS>&& pdss)
 {
     pdss->setParent(this, k);
     pdss->setMolecularWeight(molecularWeight(k));
-    if (species(k)->thermo) {
-        pdss->setReferenceThermo(species(k)->thermo);
-        species(k)->thermo->validate(speciesName(k));
+    Species& spec = *species(k);
+    if (spec.thermo) {
+        pdss->setReferenceThermo(spec.thermo);
+        spec.thermo->validate(spec.name);
+    }
+    if (spec.input.hasKey("equation-of-state")) {
+        pdss->setParameters(spec.input["equation-of-state"].as<AnyMap>());
     }
     m_minTemp = std::max(m_minTemp, pdss->minTemp());
     m_maxTemp = std::min(m_maxTemp, pdss->maxTemp());

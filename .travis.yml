@@ -1,6 +1,6 @@
 language: cpp
 sudo: false
-dist: trusty
+dist: xenial
 os:
   - linux
   - osx
@@ -11,6 +11,8 @@ addons:
       - python3-dev
       - python3-numpy
       - python3-setuptools
+      - scons
+      - python-numpy
       - gfortran
       - libsundials-serial-dev
       - liblapack-dev
@@ -29,16 +31,18 @@ env:
 before_script: |
   echo TRAVIS_OS_NAME: $TRAVIS_OS_NAME
   if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-      brew update > /dev/null
-      brew cask uninstall oclint  # See https://github.com/travis-ci/travis-ci/issues/8826
-      brew upgrade python  # Installs Python 3
-      brew install scons  # Install SCons which *should* use Python 3
-      pip3 install numpy cython  # Install numpy and Cython for Python 3
-      brew install boost
+      export CONDA_ARCH="${TRAVIS_OS_NAME}_${BUILD_ARCH}"
+      curl https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -o miniconda.sh;
+      bash miniconda.sh -b -p $HOME/miniconda
+      source $HOME/miniconda/etc/profile.d/conda.sh && conda activate
+      conda config --set always_yes yes --set changeps1 no
+      conda install -q numpy cython scons boost ruamel_yaml
+      conda install -q -c conda-forge openmp
   else
       pip3 install --user --upgrade pip
       pip3 install --user --upgrade setuptools wheel
       pip3 install --user cython
+      pip3 install --user ruamel.yaml==0.15.94  # Need a version compatible with Python 3.4
 
       # Install packages for the documentation
       pip3 install --user sphinx sphinxcontrib-matlabdomain sphinxcontrib-doxylink
@@ -46,12 +50,16 @@ before_script: |
   fi
   rm -f cantera.conf
 script: |
+  set -e
   if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-      set -e
       scons build -j2 python_cmd=/usr/bin/python3 VERBOSE=y python_package=full blas_lapack_libs=lapack,blas optimize=n coverage=y
       scons test
+      scons samples
       scons build sphinx_docs=y doxygen_docs=y sphinx_cmd="/usr/bin/python3 `which sphinx-build`"
       if [[ "${TRAVIS_PULL_REQUEST}" == "false" ]] && [[ "${TRAVIS_BRANCH}" == "master" ]] && [[ "${TRAVIS_REPO_SLUG}" == "Cantera/cantera" ]]; then
+        cd build
+        find docs -type f | grep -v /xml/ | grep -v .map$ | grep -v .md5$ | tar cjvf docs/dev-docs.tar.bz2 --files-from - >/dev/null
+        cd -
         openssl aes-256-cbc -k "${ctdeploy_pass}" -in ./doc/ctdeploy_key.enc -out ./doc/ctdeploy_key -d
         chmod 0600 ./doc/ctdeploy_key
         RSYNC_OPTIONS=(
@@ -73,8 +81,9 @@ script: |
         echo "Skipping documentation upload from source other than Cantera/cantera:master"
       fi
   else
-      scons build -j2 python_cmd=python3 VERBOSE=y python_package=full blas_lapack_libs=lapack,blas optimize=n coverage=y
+      scons build -j2 python_cmd=python3 VERBOSE=y python_package=full blas_lapack_libs=lapack,blas optimize=n coverage=y extra_inc_dirs=$CONDA_PREFIX/include extra_lib_dirs=$CONDA_PREFIX/lib
       scons test
+      scons samples
   fi
 after_success: |
   if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then

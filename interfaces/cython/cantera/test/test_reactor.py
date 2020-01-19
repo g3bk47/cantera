@@ -9,6 +9,7 @@ from .utilities import unittest
 import cantera as ct
 from . import utilities
 
+import warnings
 
 class TestReactor(utilities.CanteraTest):
     reactorClass = ct.Reactor
@@ -77,6 +78,10 @@ class TestReactor(utilities.CanteraTest):
         self.r1.name = 'hello'
         self.assertEqual(self.r1.name, 'hello')
 
+    def test_types(self):
+        self.make_reactors()
+        self.assertEqual(self.r1.type, self.reactorClass.__name__)
+
     def test_component_index(self):
         self.make_reactors(n_reactors=1)
         self.net.step()
@@ -121,6 +126,22 @@ class TestReactor(utilities.CanteraTest):
         self.assertNear(P1, self.r1.thermo.P)
         self.assertNear(P2, self.r2.thermo.P)
 
+    def test_derivative(self):
+        T1, P1 = 300, 101325
+
+        self.make_reactors(n_reactors=1, T1=T1, P1=P1)
+        self.net.advance(1.0)
+
+        # compare cvode derivative to numerical derivative
+        dydt = self.net.get_derivative(1)
+        dt = -self.net.time
+        dy = -self.net.get_state()
+        self.net.step()
+        dt += self.net.time
+        dy += self.net.get_state()
+        for i in range(self.net.n_vars):
+            self.assertNear(dydt[i], dy[i]/dt)
+
     def test_timestepping(self):
         self.make_reactors()
 
@@ -128,7 +149,20 @@ class TestReactor(utilities.CanteraTest):
         tEnd = 10.0
         dt_max = 0.07
         t = tStart
-        self.net.set_max_time_step(dt_max)
+
+        with warnings.catch_warnings(record=True) as w:
+
+            # cause all warnings to always be triggered.
+            warnings.simplefilter("always")
+            self.net.set_max_time_step(dt_max)
+
+            self.assertEqual(len(w), 1)
+            self.assertTrue(issubclass(w[-1].category, DeprecationWarning))
+            self.assertIn("To be removed after Cantera 2.5. ",
+                          str(w[-1].message))
+
+        self.net.max_time_step = dt_max
+        self.assertEqual(self.net.max_time_step, dt_max)
         self.net.set_initial_time(tStart)
         self.assertNear(self.net.time, tStart)
 
@@ -148,13 +182,18 @@ class TestReactor(utilities.CanteraTest):
         max_steps = 10
         max_step_size = 1e-07
         self.net.set_initial_time(0)
-        self.net.set_max_time_step(max_step_size)
+        self.net.max_time_step = max_step_size
         self.net.max_steps = max_steps
         with self.assertRaisesRegex(
                 ct.CanteraError, 'mxstep steps taken before reaching tout'):
             self.net.advance(1e-04)
         self.assertLessEqual(self.net.time, max_steps * max_step_size)
         self.assertEqual(self.net.max_steps, max_steps)
+
+    def test_wall_type(self):
+        self.make_reactors(P1=101325, P2=300000)
+        self.add_wall(K=0.1, A=1.0)
+        self.assertEqual(self.w.type, "Wall")
 
     def test_equalize_pressure(self):
         self.make_reactors(P1=101325, P2=300000)
@@ -200,6 +239,63 @@ class TestReactor(utilities.CanteraTest):
         self.assertTrue(n_baseline > n_rtol)
         self.assertTrue(n_baseline > n_atol)
 
+    def test_advance_limits(self):
+        P0 = 10 * ct.one_atm
+        T0 = 1100
+        X0 = 'H2:1.0, O2:0.5, AR:8.0'
+        self.make_reactors(n_reactors=1, T1=T0, P1=P0, X1=X0)
+
+        limit_H2 = .01
+        ix = self.net.global_component_index('H2', 0)
+        self.r1.set_advance_limit('H2', limit_H2)
+        self.assertEqual(self.net.advance_limits[ix], limit_H2)
+
+        self.r1.set_advance_limit('H2', None)
+        self.assertEqual(self.net.advance_limits[ix], -1.)
+
+        self.r1.set_advance_limit('H2', limit_H2)
+        self.net.advance_limits = None
+        self.assertEqual(self.net.advance_limits[ix], -1.)
+
+        self.r1.set_advance_limit('H2', limit_H2)
+        self.net.advance_limits = 0 * self.net.advance_limits - 1.
+        self.assertEqual(self.net.advance_limits[ix], -1.)
+
+    def test_advance_with_limits(self):
+        def integrate(limit_H2 = None, apply=True):
+            P0 = 10 * ct.one_atm
+            T0 = 1100
+            X0 = 'H2:1.0, O2:0.5, AR:8.0'
+            self.make_reactors(n_reactors=1, T1=T0, P1=P0, X1=X0)
+            if limit_H2 is not None:
+                self.r1.set_advance_limit('H2', limit_H2)
+                ix = self.net.global_component_index('H2', 0)
+                self.assertEqual(self.net.advance_limits[ix], limit_H2)
+
+            tEnd = 1.0
+            tStep = 1.e-3
+            nSteps = 0
+
+            t = tStep
+            while t < tEnd:
+                t_curr = self.net.advance(t, apply_limit=apply)
+                nSteps += 1
+                if t_curr == t:
+                    t += tStep
+
+            return nSteps
+
+        n_baseline = integrate()
+        n_advance_coarse = integrate(.01)
+        n_advance_fine = integrate(.001)
+        n_advance_negative = integrate(-1.0)
+        n_advance_override = integrate(.001, False)
+
+        self.assertTrue(n_advance_coarse > n_baseline)
+        self.assertTrue(n_advance_fine > n_advance_coarse)
+        self.assertTrue(n_advance_negative == n_baseline)
+        self.assertTrue(n_advance_override == n_baseline)
+
     def test_heat_transfer1(self):
         # Connected reactors reach thermal equilibrium after some time
         self.make_reactors(T1=300, T2=1000)
@@ -236,7 +332,7 @@ class TestReactor(utilities.CanteraTest):
         self.assertNear(T2a, T2b)
 
     def test_equilibrium_UV(self):
-        # Adiabatic, constant volume combustion should proceed to equilibrum
+        # Adiabatic, constant volume combustion should proceed to equilibrium
         # at constant internal energy and volume.
 
         P0 = 10 * ct.one_atm
@@ -256,7 +352,7 @@ class TestReactor(utilities.CanteraTest):
         self.assertArrayNear(self.r1.thermo.X, gas.X)
 
     def test_equilibrium_HP(self):
-        # Adiabatic, constant pressure combustion should proceed to equilibrum
+        # Adiabatic, constant pressure combustion should proceed to equilibrium
         # at constant enthalpy and pressure.
 
         P0 = 10 * ct.one_atm
@@ -358,8 +454,10 @@ class TestReactor(utilities.CanteraTest):
         reservoir = ct.Reservoir(gas2)
 
         mfc = ct.MassFlowController(reservoir, self.r1)
-        mfc.set_mass_flow_rate(lambda t: 0.1 if 0.2 <= t < 1.2 else 0.0)
+        mfc.mass_flow_rate = lambda t: 0.1 if 0.2 <= t < 1.2 else 0.0
+        self.assertEqual(mfc.mass_flow_coeff, 1.)
 
+        self.assertEqual(mfc.type, type(mfc).__name__)
         self.assertEqual(len(reservoir.inlets), 0)
         self.assertEqual(len(reservoir.outlets), 1)
         self.assertEqual(reservoir.outlets[0], mfc)
@@ -370,8 +468,13 @@ class TestReactor(utilities.CanteraTest):
         ma = self.r1.volume * self.r1.density
         Ya = self.r1.Y
 
+        self.assertNear(mfc.mdot(0.1), 0.)
+        self.assertNear(mfc.mdot(0.2), 0.1)
+        self.assertNear(mfc.mdot(1.1), 0.1)
+        self.assertNear(mfc.mdot(1.2), 0.)
+
         self.net.rtol = 1e-11
-        self.net.set_max_time_step(0.05)
+        self.net.max_time_step = 0.05
         self.net.advance(2.5)
 
         mb = self.r1.volume * self.r1.density
@@ -380,23 +483,27 @@ class TestReactor(utilities.CanteraTest):
         self.assertNear(ma + 0.1, mb)
         self.assertArrayNear(ma * Ya + 0.1 * gas2.Y, mb * Yb)
 
-    def test_user_function_error(self):
+    def test_mass_flow_controller_errors(self):
         # Make sure Python error message actually gets displayed
         self.make_reactors(n_reactors=2)
         mfc = ct.MassFlowController(self.r1, self.r2)
-        mfc.set_mass_flow_rate(lambda t: eggs)
+        mfc.mass_flow_rate = lambda t: eggs
 
         with self.assertRaisesRegex(Exception, 'eggs'):
             self.net.step()
+
+        with self.assertRaisesRegex(ct.CanteraError, 'NotImplementedError'):
+            mfc.set_pressure_function(lambda p: p**2)
 
     def test_valve1(self):
         self.make_reactors(P1=10*ct.one_atm, X1='AR:1.0', X2='O2:1.0')
         self.net.rtol = 1e-12
         valve = ct.Valve(self.r1, self.r2)
         k = 2e-5
-        valve.set_valve_coeff(k)
+        valve.valve_coeff = k
 
         self.assertEqual(self.r1.outlets, self.r2.inlets)
+        self.assertEqual(valve.valve_coeff, k)
         self.assertTrue(self.r1.energy_enabled)
         self.assertTrue(self.r2.energy_enabled)
         self.assertNear((self.r1.thermo.P - self.r2.thermo.P) * k,
@@ -430,7 +537,8 @@ class TestReactor(utilities.CanteraTest):
         self.r2.energy_enabled = False
         valve = ct.Valve(self.r1, self.r2)
         k = 2e-5
-        valve.set_valve_coeff(k)
+        valve.valve_coeff = k
+        self.assertEqual(valve.valve_coeff, k)
 
         self.assertFalse(self.r1.energy_enabled)
         self.assertFalse(self.r2.energy_enabled)
@@ -461,7 +569,9 @@ class TestReactor(utilities.CanteraTest):
         self.net.atol = 1e-20
         valve = ct.Valve(self.r1, self.r2)
         mdot = lambda dP: 5e-3 * np.sqrt(dP) if dP > 0 else 0.0
-        valve.set_valve_coeff(mdot)
+        valve.set_pressure_function(mdot)
+        self.assertEqual(valve.valve_coeff, 1.)
+
         Y1 = self.r1.Y
         kO2 = self.gas1.species_index('O2')
         kAr = self.gas1.species_index('AR')
@@ -481,6 +591,50 @@ class TestReactor(utilities.CanteraTest):
             self.assertNear(speciesMass(kAr), mAr)
             self.assertNear(speciesMass(kO2), mO2)
 
+    def test_valve_timing(self):
+        # test timed valve
+        self.make_reactors(P1=10*ct.one_atm, X1='AR:1.0', X2='O2:1.0')
+        self.net.rtol = 1e-12
+        valve = ct.Valve(self.r1, self.r2)
+        k = 2e-5
+        valve.valve_coeff = k
+        valve.set_time_function(lambda t: t>.01)
+
+        mdot = valve.valve_coeff * (self.r1.thermo.P - self.r2.thermo.P)
+        self.assertTrue(valve.mdot(0.0)==0.)
+        self.assertTrue(valve.mdot(0.01)==0.)
+        self.assertTrue(valve.mdot(0.01 + 1e-9)==mdot)
+        self.assertTrue(valve.mdot(0.02)==mdot)
+
+    def test_valve_deprecations(self):
+        # Make sure Python deprecation warnings actually get displayed
+
+        self.make_reactors()
+        valve = ct.Valve(self.r1, self.r2)
+        k = 2e-5
+
+        with warnings.catch_warnings(record=True) as w:
+
+            # cause all warnings to always be triggered.
+            warnings.simplefilter("always")
+            valve.set_valve_coeff(k)
+
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(issubclass(w[-1].category, DeprecationWarning))
+            self.assertTrue("To be removed after Cantera 2.5. "
+                            in str(w[-1].message))
+
+        with warnings.catch_warnings(record=True) as w:
+
+            # cause all warnings to always be triggered.
+            warnings.simplefilter("always")
+            valve.set_valve_function(lambda t: t>.01)
+
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(issubclass(w[-1].category, DeprecationWarning))
+            self.assertTrue("To be removed after Cantera 2.5. "
+                            in str(w[-1].message))
+
     def test_valve_errors(self):
         self.make_reactors()
         res = ct.Reservoir()
@@ -494,7 +648,7 @@ class TestReactor(utilities.CanteraTest):
             # inlet and outlet cannot be reassigned
             v._install(self.r2, self.r1)
 
-    def test_pressure_controller(self):
+    def test_pressure_controller1(self):
         self.make_reactors(n_reactors=1)
         g = ct.Solution('h2o2.xml')
         g.TPX = 500, 2*101325, 'H2:1.0'
@@ -504,11 +658,13 @@ class TestReactor(utilities.CanteraTest):
 
         mfc = ct.MassFlowController(inlet_reservoir, self.r1)
         mdot = lambda t: np.exp(-100*(t-0.5)**2)
-        mfc.set_mass_flow_rate(mdot)
+        mfc.mass_flow_coeff = 1.
+        mfc.set_time_function(mdot)
 
         pc = ct.PressureController(self.r1, outlet_reservoir)
         pc.set_master(mfc)
-        pc.set_pressure_coeff(1e-5)
+        pc.pressure_coeff = 1e-5
+        self.assertEqual(pc.pressure_coeff, 1e-5)
 
         t = 0
         while t < 1.0:
@@ -516,6 +672,52 @@ class TestReactor(utilities.CanteraTest):
             self.assertNear(mdot(t), mfc.mdot(t))
             dP = self.r1.thermo.P - outlet_reservoir.thermo.P
             self.assertNear(mdot(t) + 1e-5 * dP, pc.mdot(t))
+
+    def test_pressure_controller2(self):
+        self.make_reactors(n_reactors=1)
+        g = ct.Solution('h2o2.xml')
+        g.TPX = 500, 2*101325, 'H2:1.0'
+        inlet_reservoir = ct.Reservoir(g)
+        g.TP = 300, 101325
+        outlet_reservoir = ct.Reservoir(g)
+
+        mfc = ct.MassFlowController(inlet_reservoir, self.r1)
+        mdot = lambda t: np.exp(-100*(t-0.5)**2)
+        mfc.mass_flow_coeff = 1.
+        mfc.set_time_function(mdot)
+
+        pc = ct.PressureController(self.r1, outlet_reservoir)
+        pc.set_master(mfc)
+        pfunc = lambda dp: 1.e-5 * abs(dp)**.5
+        pc.set_pressure_function(pfunc)
+        self.assertEqual(pc.pressure_coeff, 1.)
+
+        t = 0
+        while t < 1.0:
+            t = self.net.step()
+            self.assertNear(mdot(t), mfc.mdot(t))
+            dP = self.r1.thermo.P - outlet_reservoir.thermo.P
+            self.assertNear(mdot(t) + pfunc(dP), pc.mdot(t))
+
+    def test_pressure_controller_deprecations(self):
+        # Make sure Python deprecation warnings actually get displayed
+
+        self.make_reactors()
+        res = ct.Reservoir(self.gas1)
+        mfc = ct.MassFlowController(res, self.r1, mdot=0.6)
+
+        p = ct.PressureController(self.r1, self.r2, master=mfc, K=0.5)
+
+        with warnings.catch_warnings(record=True) as w:
+
+            # cause all warnings to always be triggered.
+            warnings.simplefilter("always")
+            p.set_pressure_coeff(2.)
+
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(issubclass(w[-1].category, DeprecationWarning))
+            self.assertTrue("To be removed after Cantera 2.5. "
+                            in str(w[-1].message))
 
     def test_pressure_controller_errors(self):
         self.make_reactors()
@@ -529,19 +731,19 @@ class TestReactor(utilities.CanteraTest):
             p.mdot(0.0)
 
         with self.assertRaisesRegex(ct.CanteraError, 'Device is not ready'):
-            p = ct.PressureController(self.r1, self.r2, master=mfc)
-            p.mdot(0.0)
-
-        with self.assertRaisesRegex(ct.CanteraError, 'Device is not ready'):
             p = ct.PressureController(self.r1, self.r2)
             p.mdot(0.0)
+
+        with self.assertRaisesRegex(ct.CanteraError, 'NotImplementedError'):
+            p = ct.PressureController(self.r1, self.r2)
+            p.set_time_function(lambda t: t>1.)
 
     def test_set_initial_time(self):
         self.make_reactors(P1=10*ct.one_atm, X1='AR:1.0', X2='O2:1.0')
         self.net.rtol = 1e-12
         valve = ct.Valve(self.r1, self.r2)
         mdot = lambda dP: 5e-3 * np.sqrt(dP) if dP > 0 else 0.0
-        valve.set_valve_coeff(mdot)
+        valve.set_pressure_function(mdot)
 
         t0 = 0.0
         tf = t0 + 0.5
@@ -554,7 +756,7 @@ class TestReactor(utilities.CanteraTest):
         self.net.rtol = 1e-12
         valve = ct.Valve(self.r1, self.r2)
         mdot = lambda dP: 5e-3 * np.sqrt(dP) if dP > 0 else 0.0
-        valve.set_valve_coeff(mdot)
+        valve.set_pressure_function(mdot)
 
         t0 = 0.2
         self.net.set_initial_time(t0)
@@ -647,11 +849,11 @@ class TestWellStirredReactorIgnition(utilities.CanteraTest):
 
         # connect the reactor to the reservoirs
         self.fuel_mfc = ct.MassFlowController(self.fuel_in, self.combustor)
-        self.fuel_mfc.set_mass_flow_rate(mdot_fuel)
+        self.fuel_mfc.mass_flow_rate = mdot_fuel
         self.oxidizer_mfc = ct.MassFlowController(self.oxidizer_in, self.combustor)
-        self.oxidizer_mfc.set_mass_flow_rate(mdot_ox)
+        self.oxidizer_mfc.mass_flow_rate = mdot_ox
         self.valve = ct.Valve(self.combustor, self.exhaust)
-        self.valve.set_valve_coeff(1.0)
+        self.valve.valve_coeff = 1.0
 
         self.net = ct.ReactorNet()
         self.net.add_reactor(self.combustor)
@@ -711,7 +913,7 @@ class TestWellStirredReactorIgnition(utilities.CanteraTest):
 
     def test_ignition3(self):
         self.setup(900.0, 10*ct.one_atm, 1.0, 80.0)
-        self.net.set_max_time_step(0.5)
+        self.net.max_time_step = 0.5
         t,T = self.integrate(100.0)
         self.assertTrue(T[-1] < 910) # mixture did not ignite
 
@@ -722,8 +924,8 @@ class TestWellStirredReactorIgnition(utilities.CanteraTest):
         self.assertTrue(residuals[-1] < 10. * self.net.rtol)
         # regression test; no external basis for these results
         self.assertNear(self.combustor.T, 2486.14, 1e-5)
-        self.assertNear(self.combustor.thermo['H2O'].Y[0], 0.103804, 1e-5)
-        self.assertNear(self.combustor.thermo['HO2'].Y[0], 7.71296e-06, 1e-5)
+        self.assertNear(self.combustor.thermo['H2O'].Y[0], 0.103801, 1e-5)
+        self.assertNear(self.combustor.thermo['HO2'].Y[0], 7.71278e-06, 1e-5)
 
 
 class TestConstPressureReactor(utilities.CanteraTest):
@@ -740,9 +942,9 @@ class TestConstPressureReactor(utilities.CanteraTest):
         self.gas.TPX = 900, 25*ct.one_atm, 'CO:0.5, H2O:0.2'
 
         self.gas1 = ct.Solution('gri30.xml')
-        self.gas1.ID = 'gas'
+        self.gas1.name = 'gas'
         self.gas2 = ct.Solution('gri30.xml')
-        self.gas2.ID = 'gas'
+        self.gas2.name = 'gas'
         resGas = ct.Solution('gri30.xml')
         solid = ct.Solution('diamond.xml', 'diamond')
 
@@ -789,8 +991,8 @@ class TestConstPressureReactor(utilities.CanteraTest):
 
         self.net1 = ct.ReactorNet([self.r1])
         self.net2 = ct.ReactorNet([self.r2])
-        self.net1.set_max_time_step(0.05)
-        self.net2.set_max_time_step(0.05)
+        self.net1.max_time_step = 0.05
+        self.net2.max_time_step = 0.05
         self.net2.max_err_test_fails = 10
 
     def test_component_index(self):
@@ -900,6 +1102,7 @@ class TestSurfaceKinetics(utilities.CanteraTest):
         self.solid = ct.Solution('diamond.xml', 'diamond')
         self.interface = ct.Interface('diamond.xml', 'diamond_100',
                                       (self.gas, self.solid))
+        self.gas.TPX = None, 1.0e3, 'H:0.002, H2:1, CH4:0.01, CH3:0.0002'
         self.r1 = ct.IdealGasReactor(self.gas)
         self.r1.volume = 0.01
         self.net.add_reactor(self.r1)
@@ -1347,9 +1550,9 @@ class CombustorTestImplementation:
         # create and install the mass flow controllers. Controllers
         # m1 and m2 provide constant mass flow rates, and m3 provides
         # a short Gaussian pulse only to ignite the mixture
-        m1 = ct.MassFlowController(fuel_in, self.combustor, mdot=fuel_mdot)
-        m2 = ct.MassFlowController(oxidizer_in, self.combustor, mdot=oxidizer_mdot)
-        m3 = ct.MassFlowController(self.igniter, self.combustor, mdot=igniter_mdot)
+        self.m1 = ct.MassFlowController(fuel_in, self.combustor, mdot=fuel_mdot)
+        self.m2 = ct.MassFlowController(oxidizer_in, self.combustor, mdot=oxidizer_mdot)
+        self.m3 = ct.MassFlowController(self.igniter, self.combustor, mdot=igniter_mdot)
 
         # put a valve on the exhaust line to regulate the pressure
         self.v = ct.Valve(self.combustor, self.exhaust, K=1.0)
@@ -1385,6 +1588,24 @@ class CombustorTestImplementation:
                                             rtol=1e-6, atol=1e-12)
             self.assertFalse(bad, bad)
 
+    def test_invasive_mdot_function(self):
+        def igniter_mdot(t, t0=0.1, fwhm=0.05, amplitude=0.1):
+            # Querying properties of the igniter changes the state of the
+            # underlying ThermoPhase object, but shouldn't affect the
+            # integration
+            self.igniter.density
+            return amplitude * math.exp(-(t-t0)**2 * 4 * math.log(2) / fwhm**2)
+        self.m3.mass_flow_rate = igniter_mdot
+
+        self.data = []
+        for t in np.linspace(0, 0.25, 101)[1:]:
+            self.sim.advance(t)
+            self.data.append([t, self.combustor.T] +
+                             list(self.combustor.thermo.X))
+
+        bad = utilities.compareProfiles(self.referenceFile, self.data,
+                                        rtol=1e-6, atol=1e-12)
+        self.assertFalse(bad, bad)
 
 class WallTestImplementation:
     """
@@ -1489,9 +1710,9 @@ class PureFluidReactorTest(utilities.CanteraTest):
             net.advance(t)
             states.append(TD=r1.thermo.TD, t=net.time)
 
-        self.assertEqual(states.X[0], 0)
-        self.assertEqual(states.X[-1], 1)
-        self.assertNear(states.X[30], 0.54806, 1e-4)
+        self.assertEqual(states.Q[0], 0)
+        self.assertEqual(states.Q[-1], 1)
+        self.assertNear(states.Q[30], 0.54806, 1e-4)
 
     def test_Reactor_2(self):
         phase = ct.PureFluid('liquidvapor.xml', 'carbondioxide')
@@ -1514,9 +1735,9 @@ class PureFluidReactorTest(utilities.CanteraTest):
             net.advance(t)
             states.append(TD=r1.thermo.TD, t=net.time)
 
-        self.assertEqual(states.X[0], 0)
-        self.assertEqual(states.X[-1], 1)
-        self.assertNear(states.X[20], 0.644865, 1e-4)
+        self.assertEqual(states.Q[0], 0)
+        self.assertEqual(states.Q[-1], 1)
+        self.assertNear(states.Q[20], 0.644865, 1e-4)
 
 
     def test_ConstPressureReactor(self):
@@ -1538,7 +1759,44 @@ class PureFluidReactorTest(utilities.CanteraTest):
             net.advance(t)
             states.append(TD=r1.thermo.TD, t=t)
 
-        self.assertEqual(states.X[1], 0)
-        self.assertEqual(states.X[-2], 1)
+        self.assertEqual(states.Q[1], 0)
+        self.assertEqual(states.Q[-2], 1)
         for i in range(3,7):
             self.assertNear(states.T[i], states.T[2])
+
+
+class AdvanceCoveragesTest(utilities.CanteraTest):
+    def setup(self, model='ptcombust.xml', gas_phase='gas',
+              interface_phase='Pt_surf'):
+        # create gas and interface
+        self.gas = ct.Solution('ptcombust.xml', 'gas')
+        self.surf = ct.Interface('ptcombust.xml', 'Pt_surf', [self.gas])
+
+    def test_advance_coverages_parameters(self):
+        # create gas and interface
+        self.setup()
+
+        # first, test max step size & max steps
+        dt = 1.0
+        max_steps = 10
+        max_step_size = dt / (max_steps + 1)
+        # this should throw an error, as we can't reach dt
+        with self.assertRaises(ct.CanteraError):
+            self.surf.advance_coverages(
+                dt=dt, max_step_size=max_step_size, max_steps=max_steps)
+
+        # next, run with different tolerances
+        self.setup()
+        self.surf.coverages = 'O(S):0.1, PT(S):0.5, H(S):0.4'
+        self.gas.TP = self.surf.TP
+
+        self.surf.advance_coverages(dt=dt, rtol=1e-5, atol=1e-12)
+        cov = self.surf.coverages[:]
+
+        self.surf.coverages = 'O(S):0.1, PT(S):0.5, H(S):0.4'
+        self.gas.TP = self.surf.TP
+        self.surf.advance_coverages(dt=dt, rtol=1e-7, atol=1e-14)
+
+        # check that the solutions are similar, but not identical
+        self.assertArrayNear(cov, self.surf.coverages)
+        self.assertTrue(any(cov != self.surf.coverages))

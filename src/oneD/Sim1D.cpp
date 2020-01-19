@@ -3,7 +3,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/oneD/Sim1D.h"
 #include "cantera/oneD/MultiJac.h"
@@ -124,8 +124,8 @@ void Sim1D::restore(const std::string& fname, const std::string& id,
     for (size_t m = 0; m < nDomains(); m++) {
         Domain1D& dom = domain(m);
         if (loglevel > 0 && xd[m]->attrib("id") != dom.id()) {
-            writelog("Warning: domain names do not match: '" +
-                     (*xd[m])["id"] + + "' and '" + dom.id() + "'\n");
+            warn_user("Sim1D::restore", "Domain names do not match: "
+                "'{} and '{}'", (*xd[m])["id"], dom.id());
         }
         dom.resize(domain(m).nComponents(), intValue((*xd[m])["points"]));
     }
@@ -428,7 +428,7 @@ int Sim1D::setFixedTemperature(doublereal t)
 {
     int np = 0;
     vector_fp znew, xnew;
-    doublereal zfixed;
+    doublereal zfixed = 0.0;
     doublereal z1 = 0.0, z2 = 0.0, t1,t2;
     size_t m1 = 0;
     std::vector<size_t> dsize;

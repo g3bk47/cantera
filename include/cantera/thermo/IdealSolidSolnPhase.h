@@ -8,7 +8,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_IDEALSOLIDSOLNPHASE_H
 #define CT_IDEALSOLIDSOLNPHASE_H
@@ -83,6 +83,10 @@ public:
 
     virtual std::string type() const {
         return "IdealSolidSoln";
+    }
+
+    virtual bool isCompressible() const {
+        return false;
     }
 
     //! @name Molar Thermodynamic Properties of the Solution
@@ -164,7 +168,7 @@ public:
      * In this equation of state implementation, the density is a function only
      * of the mole fractions. Therefore, it can't be an independent variable.
      * Instead, the pressure is used as the independent variable. Functions
-     * which try to set the thermodynamic state by calling setDensity() may
+     * which try to set the thermodynamic state by calling setDensity() will
      * cause an exception to be thrown.
      */
     //@{
@@ -217,6 +221,8 @@ public:
      *     the density is a function of the pressure.
      *
      * @param rho  Input density
+     * @deprecated Functionality merged with base function after Cantera 2.5.
+     *             (superseded by isCompressible check in Phase::setDensity)
      */
     virtual void setDensity(const doublereal rho);
 
@@ -227,6 +233,8 @@ public:
      * This function will now throw an error condition.
      *
      * @param rho   Input Density
+     * @deprecated Functionality merged with base function after Cantera 2.5.
+     *             (superseded by isCompressible check in Phase::setDensity)
      */
     virtual void setMolarDensity(const doublereal rho);
 
@@ -262,6 +270,8 @@ public:
      * provided by the multiplicative factor of the standard concentrations.
      * @{
      */
+
+    virtual Units standardConcentrationUnits() const;
 
     /**
      * This method returns the array of generalized concentrations. The
@@ -561,12 +571,18 @@ public:
         return m_cp0_R;
     }
 
+    //! @deprecated To be removed after Cantera 2.5
     virtual void setPotentialEnergy(int k, doublereal pe) {
+        warn_deprecated("IdealSolidSolnPhase::setPotentialEnergy",
+            "To be removed after Cantera 2.5");
         m_pe[k] = pe;
         _updateThermo();
     }
 
+    //! @deprecated To be removed after Cantera 2.5
     virtual doublereal potentialEnergy(int k) const {
+        warn_deprecated("IdealSolidSolnPhase::potentialEnergy",
+            "To be removed after Cantera 2.5");
         return m_pe[k];
     }
 
@@ -575,19 +591,20 @@ public:
     //@{
 
     virtual bool addSpecies(shared_ptr<Species> spec);
+    virtual void initThermo();
     virtual void initThermoXML(XML_Node& phaseNode, const std::string& id);
     virtual void setToEquilState(const doublereal* lambda_RT);
 
     //! Set the form for the standard and generalized concentrations
     /*!
-     * Must be one of 'unity', 'molar_volume', or 'solvent_volume'.
-     * The default is 'unity'.
+     * Must be one of 'unity', 'species-molar-volume', or
+     * 'solvent-molar-volume'. The default is 'unity'.
      *
-     *  | m_formGC       | GeneralizedConc | StandardConc |
-     *  | -----------    | --------------- | ------------ |
-     *  | unity          | X_k             | 1.0          |
-     *  | molar_volume   | X_k / V_k       | 1.0 / V_k    |
-     *  | solvent_volume | X_k / V_N       | 1.0 / V_N    |
+     *  | m_formGC             | GeneralizedConc | StandardConc |
+     *  | -------------------- | --------------- | ------------ |
+     *  | unity                | X_k             | 1.0          |
+     *  | species-molar-volume | X_k / V_k       | 1.0 / V_k    |
+     *  | solvent-molar-volume | X_k / V_N       | 1.0 / V_N    |
      *
      *  The value and form of the generalized concentration will affect
      *  reaction rate constants involving species in this phase.
@@ -666,6 +683,7 @@ protected:
     mutable vector_fp m_expg0_RT;
 
     //! Vector of potential energies for the species.
+    //! @deprecated To be removed after Cantera 2.5
     mutable vector_fp m_pe;
 
     //! Temporary array used in equilibrium calculations
@@ -681,7 +699,7 @@ private:
      * the temperature has changed, the species thermo manager is called to
      * recalculate G, Cp, H, and S at the current temperature.
      */
-    void _updateThermo() const;
+    virtual void _updateThermo() const;
 
     //@}
 };

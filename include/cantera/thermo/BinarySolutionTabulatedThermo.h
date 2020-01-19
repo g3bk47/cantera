@@ -6,7 +6,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at https://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_BINARYSOLUTIONTABULATEDTHERMO_H
 #define CT_BINARYSOLUTIONTABULATEDTHERMO_H
@@ -143,6 +143,7 @@ public:
         return "BinarySolutionTabulatedThermo";
     }
 
+    virtual void initThermo();
     virtual void initThermoXML(XML_Node& phaseNode, const std::string& id_);
 
 protected:
@@ -156,7 +157,13 @@ protected:
     size_t m_kk_tab;
 
     //! Current tabulated species mole fraction
-    double m_xlast;
+    mutable double m_xlast;
+
+    //! Tabulated contribution to h0[m_kk_tab] at the current composition
+    mutable double m_h0_tab;
+
+    //! Tabulated contribution to s0[m_kk_tab] at the current composition
+    mutable double m_s0_tab;
 
     //! Vector for storing tabulated thermo
     vector_fp m_molefrac_tab;
@@ -164,7 +171,7 @@ protected:
     vector_fp m_entropy_tab;
 
 private:
-    void _updateThermo();
+    virtual void _updateThermo() const;
 };
 }
 

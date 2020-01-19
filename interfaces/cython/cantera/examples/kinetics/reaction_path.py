@@ -3,8 +3,10 @@ Viewing a reaction path diagram.
 
 This script uses Graphviz to generate an image. You must have Graphviz installed
 and the program 'dot' must be on your path for this example to work.
-Graphviz can be obtained from http://www.graphviz.org/ or (possibly) installed
+Graphviz can be obtained from https://www.graphviz.org/ or (possibly) installed
 using your operating system's package manager.
+
+Requires: cantera >= 2.5.0
 """
 
 import os
@@ -14,7 +16,7 @@ import cantera as ct
 
 # these lines can be replaced by any commands that generate
 # an object of a class derived from class Kinetics in some state.
-gas = ct.Solution('gri30.xml')
+gas = ct.Solution('gri30.yaml')
 gas.TPX = 1300.0, ct.one_atm, 'CH4:0.4, O2:1, N2:3.76'
 r = ct.IdealGasReactor(gas)
 net = ct.ReactorNet([r])

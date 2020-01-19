@@ -1,5 +1,5 @@
 # This file is part of Cantera. See License.txt in the top-level directory or
-# at http://www.cantera.org/license.txt for license and copyright information.
+# at https://cantera.org/license.txt for license and copyright information.
 
 # NOTE: These cdef functions cannot be members of Transport because they would
 # cause "layout conflicts" when creating derived classes with multiple bases,
@@ -143,7 +143,10 @@ cdef class Transport(_SolutionBase):
                 if not model:
                     model = 'None'
                 self.transport = newTransportMgr(stringify(model), self.thermo)
+            self._transport.reset(self.transport)
+
         super().__init__(*args, **kwargs)
+        self.base.setTransport(self._transport)
 
     property transport_model:
         """
@@ -156,9 +159,8 @@ cdef class Transport(_SolutionBase):
             return pystr(self.transport.transportType())
 
         def __set__(self, model):
-            cdef CxxTransport* old = self.transport
             self.transport = newTransportMgr(stringify(model), self.thermo)
-            del old # only if the new transport manager was successfully created
+            self._transport.reset(self.transport)
 
     property viscosity:
         """Viscosity [Pa-s]."""
@@ -242,6 +244,7 @@ cdef class DustyGasTransport(Transport):
     # The signature of this function causes warnings for Sphinx documentation
     def __init__(self, *args, **kwargs):
         self.transport = newTransportMgr(stringify("DustyGas"), self.thermo)
+        self._transport.reset(self.transport)
         super().__init__(*args, **kwargs)
 
     property porosity:

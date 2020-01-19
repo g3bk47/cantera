@@ -7,7 +7,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_PDSS_IONSFROMNEUTRAL_H
 #define CT_PDSS_IONSFROMNEUTRAL_H
@@ -80,7 +80,6 @@ public:
     //! @{
 
     virtual void setState_TP(doublereal temp, doublereal pres);
-    virtual void setState_TR(doublereal temp, doublereal rho);
 
     //! @}
     //! @name Initialization of the Object

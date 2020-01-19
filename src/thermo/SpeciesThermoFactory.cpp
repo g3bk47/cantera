@@ -6,7 +6,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/thermo/SpeciesThermoFactory.h"
 #include "cantera/thermo/MultiSpeciesThermo.h"
@@ -20,6 +20,7 @@
 #include "cantera/thermo/VPStandardStateTP.h"
 #include "cantera/base/ctml.h"
 #include "cantera/base/stringUtils.h"
+#include "cantera/base/Units.h"
 
 using namespace std;
 
@@ -43,6 +44,8 @@ SpeciesThermoInterpType* newSpeciesThermoInterpType(int type, double tlow,
         return new ShomatePoly2(tlow, thigh, pref, coeffs);
     case NASA2:
         return new NasaPoly2(tlow, thigh, pref, coeffs);
+    case NASA9MULTITEMP:
+        return new Nasa9PolyMultiTempRegion(tlow, thigh, pref, coeffs);
     default:
         throw CanteraError("newSpeciesThermoInterpType",
                            "Unknown species thermo type: {}.", type);
@@ -130,7 +133,7 @@ static SpeciesThermoInterpType* newNasaThermoFromXML(vector<XML_Node*> nodes)
         getFloatArray(nodes[1]->child("floatArray"), c0, false);
         getFloatArray(f0.child("floatArray"), c1, false);
     } else {
-        throw CanteraError("installNasaThermo",
+        throw CanteraError("newNasaThermoFromXML",
                            "non-continuous temperature ranges.");
     }
 
@@ -140,6 +143,34 @@ static SpeciesThermoInterpType* newNasaThermoFromXML(vector<XML_Node*> nodes)
     copy(c0.begin(), c0.begin()+7, c.begin() + 8); // low-T coefficients
     return newSpeciesThermoInterpType(NASA, tmin, tmax, p0, &c[0]);
 }
+
+void setupSpeciesThermo(SpeciesThermoInterpType& thermo,
+                        const AnyMap& node)
+{
+    double Pref = node.convert("reference-pressure", "Pa", OneAtm);
+    thermo.setRefPressure(Pref);
+}
+
+void setupNasaPoly(NasaPoly2& thermo, const AnyMap& node)
+{
+    setupSpeciesThermo(thermo, node);
+    vector_fp Tranges = node.convertVector("temperature-ranges", "K", 2, 3);
+    const auto& data = node["data"].asVector<vector_fp>(Tranges.size()-1);
+    for (const auto& poly : data) {
+        if (poly.size() != 7) {
+            throw CanteraError("setupNasaPoly", "Wrong number of coefficients "
+                "for NASA polynomial. Expected 7, but got {}", poly.size());
+        }
+    }
+    thermo.setMinTemp(Tranges.front());
+    thermo.setMaxTemp(Tranges.back());
+    if (Tranges.size() == 3) { // standard 2 temperature range polynomial
+        thermo.setParameters(Tranges[1], data[0], data[1]);
+    } else { // Repeat data for single temperature range for both ranges
+        thermo.setParameters(Tranges[1], data[0], data[0]);
+    }
+}
+
 
 //! Create a Shomate polynomial thermodynamic property parameterization for a
 //! species
@@ -187,7 +218,7 @@ static SpeciesThermoInterpType* newShomateThermoFromXML(
         } else {
             if(c0.size() != 7)
             {
-              throw CanteraError("installShomateThermoFromXML",
+              throw CanteraError("newShomateThermoFromXML",
                                  "Shomate thermo requires 7 coefficients in float array.");
             }
             c1.resize(7,0.0);
@@ -200,12 +231,12 @@ static SpeciesThermoInterpType* newShomateThermoFromXML(
         getFloatArray(nodes[1]->child("floatArray"), c0, false);
         getFloatArray(nodes[0]->child("floatArray"), c1, false);
     } else {
-        throw CanteraError("installShomateThermoFromXML",
+        throw CanteraError("newShomateThermoFromXML",
                            "non-continuous temperature ranges.");
     }
     if(c0.size() != 7 || c1.size() != 7)
     {
-      throw CanteraError("installShomateThermoFromXML",
+      throw CanteraError("newShomateThermoFromXML",
                          "Shomate thermo requires 7 coefficients in float array.");
     }
     vector_fp c(15);
@@ -214,6 +245,28 @@ static SpeciesThermoInterpType* newShomateThermoFromXML(
     copy(c1.begin(), c1.begin()+7, c.begin() + 8);
     return newSpeciesThermoInterpType(SHOMATE, tmin, tmax, p0, &c[0]);
 }
+
+
+void setupShomatePoly(ShomatePoly2& thermo, const AnyMap& node)
+{
+    setupSpeciesThermo(thermo, node);
+    vector_fp Tranges = node.convertVector("temperature-ranges", "K", 2, 3);
+    const auto& data = node["data"].asVector<vector_fp>(Tranges.size()-1);
+    for (const auto& poly : data) {
+        if (poly.size() != 7) {
+            throw CanteraError("setupShomatePoly", "Wrong number of coefficients "
+                "for Shomate polynomial. Expected 7, but got {}", poly.size());
+        }
+    }
+    thermo.setMinTemp(Tranges.front());
+    thermo.setMaxTemp(Tranges.back());
+    if (Tranges.size() == 3) { // standard 2 temperature range polynomial
+        thermo.setParameters(Tranges[1], data[0], data[1]);
+    } else { // Repeat data for single temperature range for both ranges
+        thermo.setParameters(Tranges[1], data[0], data[0]);
+    }
+}
+
 
 //! Create a "simple" constant heat capacity thermodynamic property
 //! parameterization for a ! species
@@ -237,6 +290,16 @@ static SpeciesThermoInterpType* newConstCpThermoFromXML(XML_Node& f)
     c[3] = getFloat(f, "cp0", "toSI");
     doublereal p0 = OneAtm;
     return newSpeciesThermoInterpType(CONSTANT_CP, tmin, tmax, p0, &c[0]);
+}
+
+void setupConstCp(ConstCpPoly& thermo, const AnyMap& node)
+{
+    setupSpeciesThermo(thermo, node);
+    double T0 = node.convert("T0", "K", 298.15);
+    double h0 = node.convert("h0", "J/kmol", 0.0);
+    double s0 = node.convert("s0", "J/kmol/K", 0.0);
+    double cp0 = node.convert("cp0", "J/kmol/K", 0.0);
+    thermo.setParameters(T0, h0, s0, cp0);
 }
 
 //! Create a NASA9 polynomial thermodynamic property parameterization for a
@@ -268,7 +331,7 @@ static SpeciesThermoInterpType* newNasa9ThermoFromXML(
 
             getFloatArray(fptr.child("floatArray"), cPoly, false);
             if (cPoly.size() != 9) {
-                throw CanteraError("installNasa9ThermoFromXML",
+                throw CanteraError("newNasa9ThermoFromXML",
                                    "Expected 9 coeff polynomial");
             }
             regionPtrs.push_back(new Nasa9Poly1(tmin, tmax, pref, &cPoly[0]));
@@ -284,6 +347,42 @@ static SpeciesThermoInterpType* newNasa9ThermoFromXML(
     }
 }
 
+
+void setupNasa9Poly(Nasa9PolyMultiTempRegion& thermo, const AnyMap& node)
+{
+    setupSpeciesThermo(thermo, node);
+    vector_fp Tranges = node.convertVector("temperature-ranges", "K", 2, 999);
+    const auto& data = node["data"].asVector<vector_fp>(Tranges.size()-1);
+    map<double, vector_fp> regions;
+    for (size_t i = 0; i < data.size(); i++) {
+        if (data[i].size() != 9) {
+            throw CanteraError("setupNasa9Poly", "Wrong number of coefficients "
+                "for NASA9 polynomial. Expected 9, but got {}", data[i].size());
+        }
+        regions[Tranges[i]] = data[i];
+    }
+    thermo.setMinTemp(Tranges.front());
+    thermo.setMaxTemp(Tranges.back());
+    thermo.setParameters(regions);
+}
+
+
+void setupMu0(Mu0Poly& thermo, const AnyMap& node)
+{
+    setupSpeciesThermo(thermo, node);
+    bool dimensionless = node.getBool("dimensionless", false);
+    double h0 = node.convert("h0", "J/kmol", 0.0);
+    map<double, double> T_mu;
+    for (const auto& item : node["data"]) {
+        double T = node.units().convert(fpValueCheck(item.first), "K");
+        if (dimensionless) {
+            T_mu[T] = item.second.asDouble() * GasConstant * T;
+        } else {
+            T_mu[T] = node.units().convert(item.second, "J/kmol");
+        }
+    }
+    thermo.setParameters(h0, T_mu);
+}
 
 SpeciesThermoInterpType* newSpeciesThermoInterpType(const XML_Node& thermo)
 {
@@ -336,6 +435,36 @@ SpeciesThermoInterpType* newSpeciesThermoInterpType(const XML_Node& thermo)
     } else {
         throw CanteraError("newSpeciesThermoInterpType",
             "Unknown species thermo model '" + thermoType + "'.");
+    }
+}
+
+
+unique_ptr<SpeciesThermoInterpType> newSpeciesThermo(const AnyMap& node)
+{
+    std::string model = node["model"].asString();
+    if (model == "NASA7") {
+        unique_ptr<NasaPoly2> thermo(new NasaPoly2());
+        setupNasaPoly(*thermo, node);
+        return unique_ptr<SpeciesThermoInterpType>(move(thermo));
+    } else if (model == "Shomate") {
+        unique_ptr<ShomatePoly2> thermo(new ShomatePoly2());
+        setupShomatePoly(*thermo, node);
+        return unique_ptr<SpeciesThermoInterpType>(move(thermo));
+    } else if (model == "NASA9") {
+        unique_ptr<Nasa9PolyMultiTempRegion> thermo(new Nasa9PolyMultiTempRegion());
+        setupNasa9Poly(*thermo, node);
+        return unique_ptr<SpeciesThermoInterpType>(move(thermo));
+    } else if (model == "constant-cp") {
+        unique_ptr<ConstCpPoly> thermo(new ConstCpPoly());
+        setupConstCp(*thermo, node);
+        return unique_ptr<SpeciesThermoInterpType>(move(thermo));
+    } else if (model == "piecewise-Gibbs") {
+        unique_ptr<Mu0Poly> thermo(new Mu0Poly());
+        setupMu0(*thermo, node);
+        return unique_ptr<SpeciesThermoInterpType>(move(thermo));
+    } else {
+        throw CanteraError("newSpeciesThermo",
+            "Unknown thermo model '{}'", model);
     }
 }
 

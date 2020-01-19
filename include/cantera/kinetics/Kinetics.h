@@ -6,7 +6,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_KINETICS_H
 #define CT_KINETICS_H
@@ -740,6 +740,9 @@ public:
     void skipUndeclaredSpecies(bool skip) {
         m_skipUndeclaredSpecies = skip;
     }
+    bool skipUndeclaredSpecies() const {
+        return m_skipUndeclaredSpecies;
+    }
 
     //! Determine behavior when adding a new reaction that contains third-body
     //! efficiencies for species not defined in any of the phases associated
@@ -748,6 +751,9 @@ public:
     //! raised.
     void skipUndeclaredThirdBodies(bool skip) {
         m_skipUndeclaredThirdBodies = skip;
+    }
+    bool skipUndeclaredThirdBodies() const {
+        return m_skipUndeclaredThirdBodies;
     }
 
     //@}
@@ -807,6 +813,11 @@ public:
      */
     void selectPhase(const doublereal* data, const thermo_t* phase,
                      doublereal* phase_data);
+
+    //! Set root Solution holding all phase information
+    virtual void setRoot(std::shared_ptr<Solution> root) {
+        m_root = root;
+    }
 
 protected:
     //! Cache for saved calculations within each Kinetics object.
@@ -929,6 +940,9 @@ protected:
 
     //! @see skipUndeclaredThirdBodies()
     bool m_skipUndeclaredThirdBodies;
+
+    //! reference to Solution
+    std::weak_ptr<Solution> m_root;
 };
 
 }

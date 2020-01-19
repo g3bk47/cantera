@@ -6,7 +6,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at https://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/thermo/BinarySolutionTabulatedThermo.h"
 #include "cantera/thermo/PDSS.h"
@@ -48,56 +48,77 @@ void BinarySolutionTabulatedThermo::compositionChanged()
     _updateThermo();
 }
 
-void BinarySolutionTabulatedThermo::_updateThermo()
+void BinarySolutionTabulatedThermo::_updateThermo() const
 {
-    double tnow = temperature();
     double xnow = moleFraction(m_kk_tab);
-    std::pair<double,double> d;
-    double dS_corr = 0.0;
+    bool x_changed = (m_xlast != xnow);
 
-    if (m_xlast != xnow) {
-        d = interpolate(xnow);
-        if (xnow == 0)
-        {
-            dS_corr = -BigNumber;
-        } else if (xnow == 1)
-        {
-            dS_corr = BigNumber;
-        } else
-        {
-            dS_corr = GasConstant*std::log(xnow/(1.0-xnow)) +
+    if (x_changed) {
+        std::tie(m_h0_tab, m_s0_tab) = interpolate(xnow);
+        if (xnow == 0) {
+            m_s0_tab = -BigNumber;
+        } else if (xnow == 1) {
+            m_s0_tab = BigNumber;
+        } else {
+            m_s0_tab += GasConstant*std::log(xnow/(1.0-xnow)) +
               GasConstant/Faraday*std::log(standardConcentration(1-m_kk_tab)
               /standardConcentration(m_kk_tab));
         }
+        m_xlast = xnow;
+    }
 
+    double tnow = temperature();
+    if (x_changed || m_tlast != tnow) {
         // Update the thermodynamic functions of the reference state.
         m_spthermo.update(tnow, m_cp0_R.data(), m_h0_RT.data(), m_s0_R.data());
-        m_tlast = tnow;
         double rrt = 1.0 / RT();
-        double rr = 1.0 / GasConstant;
+        m_h0_RT[m_kk_tab] += m_h0_tab * rrt;
+        m_s0_R[m_kk_tab] += m_s0_tab / GasConstant;
         for (size_t k = 0; k < m_kk; k++) {
             double deltaE = rrt * m_pe[k];
             m_h0_RT[k] += deltaE;
             m_g0_RT[k] = m_h0_RT[k] - m_s0_R[k];
         }
-        m_h0_RT[m_kk_tab] += d.first*rrt;
-        m_s0_R[m_kk_tab] += (d.second + dS_corr)*rr;
-        m_g0_RT[m_kk_tab] = m_h0_RT[m_kk_tab] - m_s0_R[m_kk_tab];
-
         m_tlast = tnow;
-        m_xlast = xnow;
-    } else if (m_tlast != tnow) {
-      // Update the thermodynamic functions of the reference state.
-      m_spthermo.update(tnow, m_cp0_R.data(), m_h0_RT.data(), m_s0_R.data());
-      m_tlast = tnow;
-      double rrt = 1.0 / RT();
-      for (size_t k = 0; k < m_kk; k++) {
-          double deltaE = rrt * m_pe[k];
-          m_h0_RT[k] += deltaE;
-          m_g0_RT[k] = m_h0_RT[k] - m_s0_R[k];
-      }
-      m_tlast = tnow;
     }
+}
+
+void BinarySolutionTabulatedThermo::initThermo()
+{
+    if (m_input.hasKey("tabulated-thermo")) {
+        m_kk_tab = speciesIndex(m_input["tabulated-species"].asString());
+        if (m_kk_tab == npos) {
+            throw InputFileError("BinarySolutionTabulatedThermo::initThermo",
+                m_input["tabulated-species"],
+                "Species '{}' is not in phase '{}'",
+                m_input["tabulated-species"].asString(), name());
+        }
+        const AnyMap& table = m_input["tabulated-thermo"].as<AnyMap>();
+        vector_fp x = table["mole-fractions"].asVector<double>();
+        size_t N = x.size();
+        vector_fp h = table.convertVector("enthalpy", "J/kmol", N);
+        vector_fp s = table.convertVector("entropy", "J/kmol/K", N);
+
+        // Sort the x, h, s data in the order of increasing x
+        std::vector<std::pair<double,double>> x_h(N), x_s(N);
+        for(size_t i = 0; i < N; i++){
+            x_h[i] = {x[i], h[i]};
+            x_s[i] = {x[i], s[i]};
+        }
+        std::sort(x_h.begin(), x_h.end());
+        std::sort(x_s.begin(), x_s.end());
+
+        // Store the sorted values in different arrays
+        m_molefrac_tab.resize(N);
+        m_enthalpy_tab.resize(N);
+        m_entropy_tab.resize(N);
+        for (size_t i = 0; i < N; i++) {
+            m_molefrac_tab[i] = x_h[i].first;
+            m_enthalpy_tab[i] = x_h[i].second;
+            m_entropy_tab[i] = x_s[i].second;
+        }
+    }
+    IdealSolidSolnPhase::initThermo();
 }
 
 void BinarySolutionTabulatedThermo::initThermoXML(XML_Node& phaseNode, const std::string& id_)
@@ -130,7 +151,6 @@ void BinarySolutionTabulatedThermo::initThermoXML(XML_Node& phaseNode, const std
                 throw CanteraError("BinarySolutionTabulatedThermo::initThermoXML",
                         "Species " + tabulated_species_name + " not found.");
             }
-            m_xlast = moleFraction(m_kk_tab);
         }
         if (thermoNode.hasChild("tabulatedThermo")) {
             XML_Node& dataNode = thermoNode.child("tabulatedThermo");

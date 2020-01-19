@@ -1,5 +1,5 @@
 # This file is part of Cantera. See License.txt in the top-level directory or
-# at http://www.cantera.org/license.txt for license and copyright information.
+# at https://cantera.org/license.txt for license and copyright information.
 
 cdef class ReactionPathDiagram:
     def __cinit__(self, *args, **kwargs):
@@ -181,7 +181,7 @@ cdef class ReactionPathDiagram:
                            self.diagram, True)
         self.built = True
         if verbose:
-            print self.log
+            print(self.log)
 
     property log:
         """

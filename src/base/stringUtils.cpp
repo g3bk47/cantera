@@ -5,7 +5,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 //@{
 #include "cantera/base/ct_defs.h"
@@ -205,12 +205,13 @@ std::string parseSpeciesName(const std::string& nameStr, std::string& phaseName)
             s = s.substr(icolon+1, s.size());
             icolon = s.find(':');
             if (icolon != std::string::npos) {
-                throw CanteraError("parseSpeciesName()", "two colons in name: " + nameStr);
+                throw CanteraError("parseSpeciesName",
+                                   "two colons in name: '{}'", nameStr);
             }
         }
         if (iend != std::string::npos) {
-            throw CanteraError("parseSpeciesName()",
-                               "Species name has \" ;/\n/\t\" in the middle of it: " + nameStr);
+            throw CanteraError("parseSpeciesName", "Species name has "
+                               "\" ;/\n/\t\" in the middle of it: '{}'", nameStr);
         }
     }
     return s;

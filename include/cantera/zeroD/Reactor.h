@@ -1,7 +1,7 @@
 //! @file Reactor.h
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_REACTOR_H
 #define CT_REACTOR_H
@@ -39,7 +39,18 @@ class Reactor : public ReactorBase
 public:
     Reactor();
 
+    virtual std::string typeStr() const {
+        return "Reactor";
+    }
+
+    /*!
+     * @deprecated To be changed after Cantera 2.5.
+     */
     virtual int type() const {
+        warn_deprecated("Reactor::type",
+                        "To be changed after Cantera 2.5. "
+                        "Return string instead of magic number; use "
+                        "Reactor::typeStr during transition");
         return ReactorType;
     }
 
@@ -53,10 +64,14 @@ public:
         setKineticsMgr(contents);
     }
 
-    void setKineticsMgr(Kinetics& kin);
+    void insert(shared_ptr<Solution> sol) {
+        setThermoMgr(*sol->thermo());
+        setKineticsMgr(*sol->kinetics());
+    }
 
-    //! Enable or disable changes in reactor composition due to chemical reactions.
-    void setChemistry(bool cflag = true) {
+    virtual void setKineticsMgr(Kinetics& kin);
+
+    virtual void setChemistry(bool cflag = true) {
         m_chem = cflag;
     }
 
@@ -65,8 +80,7 @@ public:
         return m_chem;
     }
 
-    //! Set the energy equation on or off.
-    void setEnergy(int eflag = 1) {
+    virtual void setEnergy(int eflag = 1) {
         if (eflag > 0) {
             m_energy = true;
         } else {
@@ -132,6 +146,26 @@ public:
     //! @see componentIndex()
     virtual std::string componentName(size_t k);
 
+    //! Set absolute step size limits during advance
+    //! @param limits array of step size limits with length neq
+    void setAdvanceLimits(const double* limits);
+
+    //! Check whether Reactor object uses advance limits
+    //! @returns           True if at least one limit is set, False otherwise
+    bool hasAdvanceLimits() {
+        return !m_advancelimits.empty();
+    }
+
+    //! Retrieve absolute step size limits during advance
+    //! @param[out] limits array of step size limits with length neq
+    //! @returns           True if at least one limit is set, False otherwise
+    bool getAdvanceLimits(double* limits);
+
+    //! Set individual step size limit for compoment name *nm*
+    //! @param nm component name
+    //! @param limit value for step size limit
+    void setAdvanceLimit(const std::string& nm, const double limit);
+
 protected:
     //! Set reaction rate multipliers based on the sensitivity variables in
     //! *params*.
@@ -149,6 +183,12 @@ protected:
     //! wall movement and heat transfer.
     //! @param t     the current time
     virtual void evalWalls(double t);
+
+    //! Evaluate inlet and outlet mass flow rates. This is called in evalEqs()
+    //! before setting the state of #m_thermo, since calling the mass flow rate
+    //! functions may modify ThermoPhase objects that are shared with other
+    //! reactors.
+    virtual void evalFlowDevices(double t);
 
     //! Evaluate terms related to surface reactions. Calculates #m_sdot and rate
     //! of change in surface species coverages.
@@ -179,6 +219,8 @@ protected:
     bool m_chem;
     bool m_energy;
     size_t m_nv;
+
+    vector_fp m_advancelimits; //!< Advance step limit
 
     // Data associated each sensitivity parameter
     std::vector<SensitivityParameter> m_sensParams;

@@ -1,7 +1,7 @@
 //! @file RedlichKwongMFTP.h
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_REDLICHKWONGMFTP_H
 #define CT_REDLICHKWONGMFTP_H
@@ -177,6 +177,7 @@ public:
     virtual void setParametersFromXML(const XML_Node& thermoNode);
     virtual void setToEquilState(const doublereal* lambda_RT);
     virtual void initThermoXML(XML_Node& phaseNode, const std::string& id);
+    virtual void initThermo();
 
     //! Retrieve a and b coefficients by looking up tabulated critical parameters
     /*!

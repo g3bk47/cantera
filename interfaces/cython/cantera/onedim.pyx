@@ -1,7 +1,7 @@
 # This file is part of Cantera. See License.txt in the top-level directory or
-# at http://www.cantera.org/license.txt for license and copyright information.
+# at https://cantera.org/license.txt for license and copyright information.
 
-import interrupts
+from .interrupts import no_op
 import warnings
 
 # Need a pure-python class to store weakrefs to
@@ -449,7 +449,7 @@ cdef class _FlowBase(Domain1D):
         whenever the energy equation is disabled.
 
         :param pos:
-            arrray of relative positions from 0 to 1
+            array of relative positions from 0 to 1
         :param temp:
             array of temperature values
 
@@ -537,7 +537,7 @@ cdef class IonFlow(_FlowBase):
     """
     An ion flow domain.
 
-    In an ion flow dommain, the electric drift is added to the diffusion flux
+    In an ion flow domain, the electric drift is added to the diffusion flux
     """
     def __cinit__(self, _SolutionBase thermo, *args, **kwargs):
         gas = getIdealGasPhase(thermo)
@@ -589,7 +589,7 @@ cdef class Sim1D:
 
         self.sim = new CxxSim1D(D)
         self.domains = tuple(domains)
-        self.set_interrupt(interrupts.no_op)
+        self.set_interrupt(no_op)
         self._initialized = False
         self._initial_guess_args = ()
         self._initial_guess_kwargs = {}
@@ -881,6 +881,12 @@ cdef class Sim1D:
             self.sim.solve(loglevel, <cbool>refine_grid)
             return
 
+        def set_transport(multi):
+            self.gas.transport_model = multi
+            for dom in self.domains:
+                if isinstance(dom, _FlowBase):
+                    dom.set_transport(self.gas)
+
         have_user_tolerances = any(dom.have_user_tolerances for dom in self.domains)
         if have_user_tolerances:
             # Save the user-specified tolerances
@@ -894,16 +900,18 @@ cdef class Sim1D:
 
         # Do initial steps without Soret diffusion
         soret_doms = [dom for dom in self.domains if getattr(dom, 'soret_enabled', False)]
-        for dom in soret_doms:
-            dom.soret_enabled = False
+
+        def set_soret(soret):
+            for dom in soret_doms:
+                dom.soret_enabled = soret
+
+        set_soret(False)
 
         # Do initial solution steps without multicomponent transport
+        transport = self.gas.transport_model
         solve_multi = self.gas.transport_model == 'Multi'
         if solve_multi:
-            self.gas.transport_model = 'Mix'
-            for dom in self.domains:
-                if isinstance(dom, _FlowBase):
-                    dom.set_transport(self.gas)
+            set_transport('Mix')
 
         def log(msg, *args):
             if loglevel:
@@ -934,6 +942,11 @@ cdef class Sim1D:
             except CanteraError as e:
                 log(str(e))
                 solved = False
+            except Exception as e:
+                # restore settings before re-raising exception
+                set_transport(transport)
+                set_soret(True)
+                raise e
 
             # If initial solve using energy equation fails, fall back on the
             # traditional fixed temperature solve followed by solving the energy
@@ -947,6 +960,11 @@ cdef class Sim1D:
                 except CanteraError as e:
                     log(str(e))
                     solved = False
+                except Exception as e:
+                    # restore settings before re-raising exception
+                    set_transport(transport)
+                    set_soret(True)
+                    raise e
 
                 if solved:
                     log('Solving on {} point grid with energy equation re-enabled', N)
@@ -957,6 +975,11 @@ cdef class Sim1D:
                     except CanteraError as e:
                         log(str(e))
                         solved = False
+                    except Exception as e:
+                        # restore settings before re-raising exception
+                        set_transport(transport)
+                        set_soret(True)
+                        raise e
 
             if solved and not self.extinct() and refine_grid:
                 # Found a non-extinct solution on the fixed grid
@@ -967,6 +990,11 @@ cdef class Sim1D:
                 except CanteraError as e:
                     log(str(e))
                     solved = False
+                except Exception as e:
+                    # restore settings before re-raising exception
+                    set_transport(transport)
+                    set_soret(True)
+                    raise e
 
                 if solved and not self.extinct():
                     # Found a non-extinct solution on the refined grid
@@ -983,18 +1011,14 @@ cdef class Sim1D:
 
         if solve_multi:
             log('Solving with multicomponent transport')
-            self.gas.transport_model = 'Multi'
-            for dom in self.domains:
-                if isinstance(dom, _FlowBase):
-                    dom.set_transport(self.gas)
+            set_transport('Multi')
 
         if soret_doms:
             log('Solving with Soret diffusion')
-            for dom in soret_doms:
-                dom.soret_enabled = True
+            set_soret(True)
 
         if have_user_tolerances:
-            log('Solving with user-specifed tolerances')
+            log('Solving with user-specified tolerances')
             for i in range(len(self.domains)):
                 self.domains[i].set_steady_tolerances(abs=atol_ss_final[i],
                                                       rel=rtol_ss_final[i])
@@ -1004,7 +1028,6 @@ cdef class Sim1D:
         # Final call with expensive options enabled
         if have_user_tolerances or solve_multi or soret_doms:
             self.sim.solve(loglevel, <cbool>refine_grid)
-
 
     def refine(self, loglevel=1):
         """

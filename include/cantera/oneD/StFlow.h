@@ -1,7 +1,7 @@
 //! @file StFlow.h
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_STFLOW_H
 #define CT_STFLOW_H
@@ -45,7 +45,12 @@ public:
     //!     to evaluate all thermodynamic, kinetic, and transport properties.
     //! @param nsp Number of species.
     //! @param points Initial number of grid points
-    StFlow(IdealGasPhase* ph = 0, size_t nsp = 1, size_t points = 1);
+    StFlow(ThermoPhase* ph = 0, size_t nsp = 1, size_t points = 1);
+
+    //! Delegating constructor
+    StFlow(shared_ptr<ThermoPhase> th, size_t nsp = 1, size_t points = 1) :
+        StFlow(th.get(), nsp, points) {
+    }
 
     //! @name Problem Specification
     //! @{

@@ -1,7 +1,7 @@
 //! @file IDA_Solver.cpp
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/numerics/IDA_Solver.h"
 #include "cantera/base/stringUtils.h"
@@ -446,7 +446,11 @@ void IDA_Solver::init(doublereal t0)
         #if CT_SUNDIALS_VERSION >= 30
             SUNLinSolFree((SUNLinearSolver) m_linsol);
             SUNMatDestroy((SUNMatrix) m_linsol_matrix);
-            m_linsol_matrix = SUNBandMatrix(N, nu, nl, nu+nl);
+            #if CT_SUNDIALS_VERSION < 40
+                m_linsol_matrix = SUNBandMatrix(N, nu, nl, nu+nl);
+            #else
+                m_linsol_matrix = SUNBandMatrix(N, nu, nl);
+            #endif
             if (m_linsol_matrix == nullptr) {
                 throw CanteraError("IDA_Solver::init",
                     "Unable to create SUNBandMatrix of size {} with bandwidths "

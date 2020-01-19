@@ -7,7 +7,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_SURFPHASE_H
 #define CT_SURFPHASE_H
@@ -284,6 +284,7 @@ public:
      * @endcode
      */
     virtual void setParametersFromXML(const XML_Node& thermoData);
+    virtual void initThermo();
 
     virtual bool addSpecies(shared_ptr<Species> spec);
 
@@ -394,6 +395,12 @@ public:
      */
     void getCoverages(doublereal* theta) const;
 
+    //! @copydoc ThermoPhase::setState
+    /*!
+     * Additionally uses the key `coverages` to set the fractional coverages.
+     */
+    virtual void setState(const AnyMap& state);
+
 protected:
     //! Surface site density (kmol m-2)
     doublereal m_n0;
@@ -440,6 +447,7 @@ private:
      */
     void _updateThermo(bool force=false) const;
 };
+
 }
 
 #endif

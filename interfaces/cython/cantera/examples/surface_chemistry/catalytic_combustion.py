@@ -1,14 +1,16 @@
 """
-CATCOMB  -- Catalytic combustion of methane on platinum.
+CATCOMB -- Catalytic combustion of methane on platinum.
 
 This script solves a catalytic combustion problem. A stagnation flow is set
 up, with a gas inlet 10 cm from a platinum surface at 900 K. The lean,
-premixed methane/air mixture enters at ~ 6 cm/s (0.06 kg/m2/s), and burns
+premixed methane/air mixture enters at ~6 cm/s (0.06 kg/m2/s), and burns
 catalytically on the platinum surface. Gas-phase chemistry is included too,
 and has some effect very near the surface.
 
 The catalytic combustion mechanism is from Deutschman et al., 26th
 Symp. (Intl.) on Combustion,1996 pp. 1747-1754
+
+Requires: cantera >= 2.5.0
 """
 
 import numpy as np
@@ -31,7 +33,7 @@ comp1 = 'H2:0.05, O2:0.21, N2:0.78, AR:0.01'
 comp2 = 'CH4:0.095, O2:0.21, N2:0.78, AR:0.01'
 
 # The inlet/surface separation is 10 cm.
-width = 0.1 # m
+width = 0.1  # m
 
 loglevel = 1  # amount of diagnostic output (0 to 5)
 
@@ -39,19 +41,19 @@ loglevel = 1  # amount of diagnostic output (0 to 5)
 #
 # This object will be used to evaluate all thermodynamic, kinetic, and
 # transport properties. The gas phase will be taken from the definition of
-# phase 'gas' in input file 'ptcombust.cti,' which is a stripped-down version
+# phase 'gas' in input file 'ptcombust.yaml,' which is a stripped-down version
 # of GRI-Mech 3.0.
-gas = ct.Solution('ptcombust.cti', 'gas')
+gas = ct.Solution('ptcombust.yaml', 'gas', transport_model=transport)
 gas.TPX = tinlet, p, comp1
 
 ################ create the interface object ##################
 #
 # This object will be used to evaluate all surface chemical production rates.
 # It will be created from the interface definition 'Pt_surf' in input file
-# 'ptcombust.cti,' which implements the reaction mechanism of Deutschmann et
+# 'ptcombust.yaml,' which implements the reaction mechanism of Deutschmann et
 # al., 1995 for catalytic combustion on platinum.
 #
-surf_phase = ct.Interface('ptcombust.cti', 'Pt_surf', [gas])
+surf_phase = ct.Interface('ptcombust.yaml', 'Pt_surf', [gas])
 surf_phase.TP = tsurf, p
 
 # integrate the coverage equations in time for 1 s, holding the gas

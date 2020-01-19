@@ -7,7 +7,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/thermo/MolalityVPSSTP.h"
 #include "cantera/base/stringUtils.h"
@@ -53,9 +53,9 @@ int MolalityVPSSTP::pHScale() const
 void MolalityVPSSTP::setMoleFSolventMin(doublereal xmolSolventMIN)
 {
     if (xmolSolventMIN <= 0.0) {
-        throw CanteraError("MolalityVPSSTP::setSolute ", "trouble");
+        throw CanteraError("MolalityVPSSTP::setMoleFSolventMin ", "trouble");
     } else if (xmolSolventMIN > 0.9) {
-        throw CanteraError("MolalityVPSSTP::setSolute ", "trouble");
+        throw CanteraError("MolalityVPSSTP::setMoleFSolventMin ", "trouble");
     }
     m_xmolSolventMIN = xmolSolventMIN;
 }
@@ -269,6 +269,23 @@ void MolalityVPSSTP::setState_TPM(doublereal t, doublereal p, const std::string&
 {
     setMolalitiesByName(m);
     setState_TP(t, p);
+}
+
+void MolalityVPSSTP::setState(const AnyMap& state) {
+    AnyValue molalities;
+    if (state.hasKey("molalities")) {
+        molalities = state["molalities"];
+    } else if (state.hasKey("M")) {
+        molalities = state["M"];
+    }
+
+    if (molalities.is<string>()) {
+        setMolalitiesByName(molalities.asString());
+    } else if (molalities.is<AnyMap>()) {
+        setMolalitiesByName(molalities.asMap<double>());
+    }
+
+    VPStandardStateTP::setState(state);
 }
 
 void MolalityVPSSTP::initThermo()

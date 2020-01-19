@@ -17,7 +17,7 @@
 # This will produce CTML file 'infile.xml'
 
 # This file is part of Cantera. See License.txt in the top-level directory or
-# at http://www.cantera.org/license.txt for license and copyright information.
+# at https://cantera.org/license.txt for license and copyright information.
 
 from __future__ import print_function
 
@@ -845,11 +845,11 @@ class pureFluidParameters(activityCoefficients):
     def build(self,a):
         f= a.addChild("pureFluidParameters")
         f['species'] = self._species
-        s = '%10.4E, %10.4E \n' % (self._acoeff[0], self._acoeff[1])
+        s = '%.10g, %.10g\n' % (self._acoeff[0], self._acoeff[1])
         ac = f.addChild("a_coeff",s)
         ac["units"] = _upres+'-'+_ulen+'6/'+_umol+'2'
         ac["model"] = "linear_a"
-        s = '%0.2f \n' % self._bcoeff
+        s = '%.10g\n' % self._bcoeff
         bc = f.addChild("b_coeff",s)
         bc["units"] = _ulen+'3/'+_umol
 
@@ -864,12 +864,12 @@ class crossFluidParameters(activityCoefficients):
         f= a.addChild("crossFluidParameters")
         f["species2"] = self._species2
         f["species1"] = self._species1
-        s = '%10.4E, %10.4E \n' % (self._acoeff[0], self._acoeff[1])
+        s = '%.10g, %.10g\n' % (self._acoeff[0], self._acoeff[1])
         ac = f.addChild("a_coeff",s)
         ac["units"] = _upres+'-'+_ulen+'6/'+_umol+'2'
         ac["model"] = "linear_a"
         if self._bcoeff:
-            s = '%0.2f \n' % self._bcoeff
+            s = '%.10g\n' % self._bcoeff
             bc = f.addChild("b_coeff",s)
             bc["units"] = _ulen+'3/'+_umol
 
@@ -1082,6 +1082,10 @@ class Arrhenius(rate_expression):
                 addFloat(c, 'e', cov[3], fmt = '%f', defunits = _ue)
 
 class stick(Arrhenius):
+    """
+    A rate expression for a surface reaction given as a sticking probability,
+    parameterized using a modified Arrhenius expression.
+    """
     def __init__(self, *args, **kwargs):
         """
         :param motz_wise: 'True' if the Motz & Wise correction should be used,
@@ -1125,7 +1129,7 @@ class reaction(object):
                  id = '',
                  order = '',
                  options = []):
-        """
+        r"""
         :param equation:
             A string specifying the chemical equation.
         :param kf:
@@ -1414,7 +1418,7 @@ class pdep_reaction(reaction):
                 if r[-1] == ')' and r in self._p:
                     species = r[:-1]
                     if self._eff:
-                        raise CTI_Error("In reaction '{0}', explcit third body "
+                        raise CTI_Error("In reaction '{0}', explicit third body "
                             "'(+ {1})' and efficiencies cannot both be "
                             "specified".format(self._e, species))
                     self._eff = species+':1.0'
@@ -1592,6 +1596,12 @@ class chebyshev_reaction(reaction):
             del self._r['m)']
             del self._p['m)']
 
+        nP = len(self.coeffs[0])
+        for line in self.coeffs:
+            if len(line) != nP:
+                raise CTI_Error('Each row of Chebyshev coefficients must '
+                    'contain the same number of values.')
+
     def build(self, p):
         r = reaction.build(self, p)
         kfnode = r.child('rateCoeff')
@@ -1650,7 +1660,7 @@ class surface_reaction(reaction):
             Charge transfer coefficient: A number between 0 and 1 which, for a
             charge transfer reaction, determines how much of the electric
             potential difference between two phases is applied to the
-            activiation energy of the fwd reaction.  The remainder is applied to
+            activation energy of the fwd reaction.  The remainder is applied to
             the reverse reaction.
         :param rate_coeff_type:
             Form of the rate coefficient given.  If none given, assumed that the
@@ -2094,50 +2104,18 @@ class metal(phase):
         k = ph.addChild("kinetics")
         k['model'] = 'none'
 
-class semiconductor(phase):
-    """A semiconductor."""
-    def __init__(self,
-                 name = '',
-                 elements = '',
-                 species = '',
-                 note = '',
-                 density = -1.0,
-                 bandgap = 1.0 * eV,
-                 effectiveMass_e = 1.0 * ElectronMass,
-                 effectiveMass_h = 1.0 * ElectronMass,
-                 transport = 'None',
-                 initial_state = None,
-                 options = []):
-
-        phase.__init__(self, name, 3, elements, species, note, 'none',
-                       initial_state, options)
-        self._dens = density
-        self._pure = 0
-        self._tr = transport
-        self._emass = effectiveMass_e
-        self._hmass = effectiveMass_h
-        self._bandgap = bandgap
-
-    def conc_dim(self):
-        return (1,-3)
-
-    def build(self, p):
-        ph = phase.build(self, p)
-        e = ph.child("thermo")
-        e['model'] = 'Semiconductor'
-        addFloat(e, 'density', self._dens, defunits = _umass+'/'+_ulen+'3')
-        addFloat(e, 'effectiveMass_e', self._emass, defunits = _umass)
-        addFloat(e, 'effectiveMass_h', self._hmass, defunits = _umass)
-        addFloat(e, 'bandgap', self._bandgap, defunits = 'eV')
-        if self._tr:
-            t = ph.addChild('transport')
-            t['model'] = self._tr
-        k = ph.addChild("kinetics")
-        k['model'] = 'none'
-
 
 class incompressible_solid(phase):
-    """An incompressible solid."""
+    """An incompressible solid.
+
+    .. deprecated:: 2.5
+
+        To be deprecated with version 2.5, and removed thereafter.
+        This phase pointed to an ill-considered constant_density ThermoPhase
+        model, which assumed a constant mass density. This underlying phase is
+        simultaneously being deprecated. Please consider switching to
+        either `IdealSolidSolution` or `lattice` phase, instead.
+    """
     def __init__(self,
                  name = '',
                  elements = '',
@@ -2295,7 +2273,7 @@ class lattice(phase):
                         initial_state, options)
         self._tr = transport
         self._n = site_density
-        self._species = species
+
         if name == '':
             raise CTI_Error('sublattice name must be specified')
         if species == '':

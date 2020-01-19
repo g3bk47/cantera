@@ -7,7 +7,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_INTEGRATOR_H
 #define CT_INTEGRATOR_H
@@ -141,6 +141,18 @@ public:
         return 0;
     }
 
+    //! n-th derivative of the output function at time tout.
+    virtual double* derivative(double tout, int n) {
+        warn("derivative");
+        return 0;
+    }
+
+    //! Order used during the last solution step
+    virtual int lastOrder() const {
+        warn("lastOrder");
+        return 0;
+    }
+
     //! The number of equations.
     virtual int nEquations() const {
         warn("nEquations");
@@ -164,8 +176,9 @@ public:
     }
 
     //! Set the linear iterator.
+    //! @deprecated Unused. To be removed after Cantera 2.5.
     virtual void setIterator(IterType t) {
-        warn("setInterator");
+        warn_deprecated("Integrator::setIterator", "To be removed after Cantera 2.5.");
     }
 
     //! Set the maximum step size

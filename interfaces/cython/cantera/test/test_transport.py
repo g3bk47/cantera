@@ -28,7 +28,6 @@ class TestTransport(utilities.CanteraTest):
         self.assertTrue(all(np.diff(Dkm_prime) < 2*eps))
         self.assertNear(Dkm_prime[0], alpha)
 
-
     def test_mixtureAveraged(self):
         self.assertEqual(self.phase.transport_model, 'Mix')
         Dkm1 = self.phase.mix_diff_coeffs
@@ -46,6 +45,25 @@ class TestTransport(utilities.CanteraTest):
         self.assertArrayNear(Dkm1c, Dkm2c)
         self.assertArrayNear(Dbin1, Dbin2)
         self.assertArrayNear(Dbin1, Dbin1.T)
+
+    def test_mixDiffCoeffsChange(self):
+        # This test is mainly to make code coverage in GasTransport.cpp
+        # consistent by always covering the path where the binary diffusion
+        # coefficients need to be updated
+        Dkm1 = self.phase.mix_diff_coeffs_mole
+        self.phase.TP = self.phase.T + 1, None
+        Dkm2 = self.phase.mix_diff_coeffs_mole
+        self.assertTrue(all(Dkm2 > Dkm1))
+
+        Dkm1 = self.phase.mix_diff_coeffs_mass
+        self.phase.TP = self.phase.T + 1, None
+        Dkm2 = self.phase.mix_diff_coeffs_mass
+        self.assertTrue(all(Dkm2 > Dkm1))
+
+        Dkm1 = self.phase.mix_diff_coeffs
+        self.phase.TP = self.phase.T + 1, None
+        Dkm2 = self.phase.mix_diff_coeffs
+        self.assertTrue(all(Dkm2 > Dkm1))
 
     def test_CK_mode(self):
         mu_ct = self.phase.viscosity
@@ -173,6 +191,17 @@ class TestIonTransport(utilities.CanteraTest):
         self.assertTrue(bdiff != self.gas.binary_diff_coeffs[self.kN2][self.kH3Op])
         self.assertTrue(mdiff != self.gas.mix_diff_coeffs[self.kH3Op])
         self.assertTrue(mobi != self.gas.mobilities[self.kH3Op])
+
+
+class TestIonTransportYAML(TestIonTransport):
+    def setUp(self):
+        self.p = ct.one_atm
+        self.T = 2237
+        self.gas = ct.Solution('ch4_ion.yaml')
+        self.gas.X = 'O2:0.7010, H2O:0.1885, CO2:9.558e-2'
+        self.gas.TP = self.T, self.p
+        self.kN2 = self.gas.species_index("N2")
+        self.kH3Op = self.gas.species_index("H3O+")
 
 
 class TestTransportGeometryFlags(utilities.CanteraTest):
@@ -332,6 +361,45 @@ class TestWaterTransport(utilities.CanteraTest):
         self.check_thermal_conductivity(660, 2.2e7, 0.14872, 1e-2)
         self.check_thermal_conductivity(660, 2.54e7, 0.35484, 2e-2)
         self.check_thermal_conductivity(660, 2.8e7, 0.38479, 1e-2)
+
+class TestIAPWS95WaterTransport(utilities.CanteraTest):
+    """
+    Water transport properties test using the IAPWS95 equation of state. This
+    results in better comparisons with data from the NIST Webbook.
+    """
+    @classmethod
+    def setUpClass(cls):
+        cls.water = ct.Solution('thermo-models.yaml', 'liquid-water')
+
+    def check_viscosity(self, T, P, mu, rtol):
+        self.water.TP = T, P
+        self.assertNear(self.water.viscosity, mu, rtol)
+
+    def check_thermal_conductivity(self, T, P, k, rtol):
+        self.water.TP = T, P
+        self.assertNear(self.water.thermal_conductivity, k, rtol)
+
+    def test_viscosity_liquid(self):
+        self.check_viscosity(400, 1e6, 2.1880e-4, 2e-4)
+        self.check_viscosity(400, 8e6, 2.2061e-4, 2e-4)
+        self.check_viscosity(620, 1.6e7, 6.7489e-5, 1e-4)
+        self.check_viscosity(620, 2.8e7, 7.5684e-5, 1e-4)
+
+    def test_thermal_conductivity_liquid(self):
+        self.check_thermal_conductivity(400, 1e6, 0.68410, 1e-4)
+        self.check_thermal_conductivity(400, 8e6, 0.68836, 1e-4)
+        self.check_thermal_conductivity(620, 1.6e7, 0.45458, 1e-4)
+        self.check_thermal_conductivity(620, 2.8e7, 0.49705, 1e-4)
+
+    def test_viscosity_supercritical(self):
+        self.check_viscosity(660, 2.2e7, 2.7129e-5, 1e-4)
+        self.check_viscosity(660, 2.54e7, 3.8212e-5, 1e-4)
+        self.check_viscosity(660, 2.8e7, 5.3159e-5, 1e-4)
+
+    def test_thermal_conductivity_supercritical(self):
+        self.check_thermal_conductivity(660, 2.2e7, 0.14872, 1e-4)
+        self.check_thermal_conductivity(660, 2.54e7, 0.35484, 1e-4)
+        self.check_thermal_conductivity(660, 2.8e7, 0.38479, 1e-4)
 
 
 class TestTransportData(utilities.CanteraTest):

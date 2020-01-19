@@ -6,7 +6,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_LATTICESOLID_H
 #define CT_LATTICESOLID_H
@@ -109,6 +109,22 @@ public:
 
     virtual std::string type() const {
         return "LatticeSolid";
+    }
+
+    //! String indicating the mechanical phase of the matter in this Phase.
+    /*!
+     * `LatticeSolid` phases only represent solids.
+     */
+    virtual std::string phaseOfMatter() const {
+        return "solid";
+    }
+
+    virtual bool isCompressible() const {
+        return false;
+    }
+
+    std::map<std::string, size_t> nativeState() const {
+        return { {"T", 0}, {"P", 1}, {"X", 2} };
     }
 
     virtual doublereal minTemp(size_t k = npos) const;
@@ -302,6 +318,8 @@ public:
     virtual void setConcentrations(const doublereal* const conc) {
         throw NotImplementedError("LatticeSolidPhase::setConcentrations");
     }
+
+    virtual Units standardConcentrationUnits() const;
 
     virtual void getActivityConcentrations(doublereal* c) const;
 

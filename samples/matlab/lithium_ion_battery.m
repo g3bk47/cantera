@@ -1,101 +1,106 @@
-% This example file calculates the open-circuit voltage for a lithium-ion
-% battery over a range of compositions.
+% This example file calculates the cell voltage of a lithium-ion battery
+% at given temperature, pressure, current, and range of state of charge (SOC).
 %
 % The thermodynamics are based on a graphite anode and a LiCoO2 cathode,
 % modeled using the 'BinarySolutionTabulatedThermo' class.
+% Further required cell parameters are the electrolyte ionic resistance, the
+% stoichiometry ranges of the active materials (electrode balancing), and the
+% surface area of the active materials.
 %
-% Note that the function 'E_cell' below has even greater capabilities than
-% what we use, here. It calculates the steady state cell voltage, at a
-% given composition and cell current, for a given electrolyte ionic
-% resistance.  This functionality is presented in greater detail in the
+% The functionality of this example is presented in greater detail in the
 % reference (which also describes the derivation of the
 % BinarySolutionTabulatedThermo class):
 %
 % Reference:
-% M. Mayur, S. DeCaluwe, B. L. Kee, W. G. Bessler, "Modeling
-% thermodynamics and kinetics of intercalation phases for lithium-ion
-% batteries in Cantera", under review at Electrochimica Acta.
+% M. Mayur, S. C. DeCaluwe, B. L. Kee, W. G. Bessler, “Modeling and simulation
+% of the thermodynamics of lithium-ion battery intercalation materials in the
+% open-source software Cantera,” Electrochim. Acta 323, 134797 (2019),
+% https://doi.org/10.1016/j.electacta.2019.134797
 
-% For the sake of simplicity, we're going to assume that the anode and
-% cathode capacities are perfectly balanced (i.e. if the cathode lithium
-% content is X percent of it's max possible (i.e. its capacity), then we
-% will assume that the anode is at 1-X percent.  Without loss of
-% generality, we will define the anode composition:
+% -----------------------------------------------------------------------------
+% Input
+% -----------------------------------------------------------------------------
 
-% The routine below returns the cell voltage (in Volt) of a lithium-ion
-% cell for a given cell current and active material lithium stoichiometries.
-%
-% Input:
-% - stoichiometries X_Li_ca and X_Li_an [-] (can be vectors)
-% - temperature T [K]
-% - pressure P [Pa]
-% - externally-applied current I_app [A]
-% - electrolyte resistance R_elyt [Ohm]
+% Operation parameters
+SOC = 0:0.02:1; % [-] Input state of charge (0...1) (can be a vector)
+I_app = -1; % [A] Externally-applied current, negative for discharge
+T = 293; % [K] Temperature
+P = oneatm; % [Pa] Pressure
 
-X_Li_an = [0.005:0.025:0.995];
-X_Li_ca = 1 - X_Li_an;
-
-I_app = 0;
-R_elyt = 0;
-T = 300;
-P = oneatm;
-
-global F
-% Parameters
-inputCTI = 'lithium_ion_battery.cti'; % cantera input file name
-F = 96485; % Faraday's constant [C/mol]
+% Cell properties
+inputFile = 'lithium_ion_battery.yaml'; % Cantera input file name
+R_elyt = 0.0384; % [Ohm] Electrolyte resistance
 S_ca = 1.1167; % [m^2] Cathode total active material surface area
 S_an = 0.7824; % [m^2] Anode total active material surface area
 
+% Electrode balancing: The "balancing" of the electrodes relates the chemical
+% composition (lithium mole fraction in the active materials) to the macroscopic
+% cell-level state of charge.
+X_Li_an_0 = 0.01; % [-] anode Li mole fraction at SOC = 0 %
+X_Li_an_1 = 0.75; % [-] anode Li mole fraction at SOC = 100 %
+X_Li_ca_0 = 0.99; % [-] cathode Li mole fraction at SOC = 0 %
+X_Li_ca_1 = 0.49; % [-] cathode Li mole fraction at SOC = 100 %
+
+% -----------------------------------------------------------------------------
+% Calculations
+% -----------------------------------------------------------------------------
+
+% Calculate mole fractions from SOC
+X_Li_an = (X_Li_an_1-X_Li_an_0)*SOC+X_Li_an_0; % anode balancing
+X_Li_ca = (X_Li_ca_0-X_Li_ca_1)*(1-SOC)+X_Li_ca_1; % cathode balancing
+
 % Import all Cantera phases
-anode = Solution(inputCTI, 'anode');
-cathode = Solution(inputCTI, 'cathode');
-elde = Solution(inputCTI, 'electron');
-elyt = Solution(inputCTI, 'electrolyte');
-anode_interface = Interface(inputCTI, 'edge_anode_electrolyte', anode, elde, elyt);
-cathode_interface = Interface(inputCTI, 'edge_cathode_electrolyte', cathode, elde, elyt);
+anode = Solution(inputFile, 'anode');
+cathode = Solution(inputFile, 'cathode');
+elde = Solution(inputFile, 'electron');
+elyt = Solution(inputFile, 'electrolyte');
+anode_interface = Interface(inputFile, 'edge_anode_electrolyte', anode, elde, elyt);
+cathode_interface = Interface(inputFile, 'edge_cathode_electrolyte', cathode, elde, elyt);
 
 % Set the temperatures and pressures of all phases
-phases = [anode elde elyt cathode];
-for ph = phases
-    set(ph,'T',T,'P',P);
-end
+set(anode,'T',T,'P',P);
+set(cathode,'T',T,'P',P);
+set(elde,'T',T,'P',P);
+set(elyt,'T',T,'P',P);
+set(anode_interface,'T',T,'P',P);
+set(cathode_interface,'T',T,'P',P);
 
 % Calculate cell voltage, separately for each entry of the input vectors
-E_cell = zeros(length(X_Li_ca),1);
-for i = 1:length(X_Li_ca)
+V_cell = zeros(length(SOC),1);
+phi_l_an = 0;
+phi_s_ca = 0;
+for i = 1:length(SOC)
     % Set anode electrode potential to 0
     phi_s_an = 0;
 
     % Calculate anode electrolyte potential
-    phi_l_an = fzero(@(E) anode_curr(phi_s_an,E,X_Li_an(i),anode,elde,elyt,anode_interface,S_an)+I_app, 0);
+    phi_l_an = fzero(@(E) anode_curr(phi_s_an,E,X_Li_an(i),anode,elde,elyt,anode_interface,S_an)-I_app, phi_l_an);
 
     % Calculate cathode electrolyte potential
     phi_l_ca = phi_l_an + I_app*R_elyt;
 
     % Calculate cathode electrode potential
-    phi_s_ca = fzero(@(E) cathode_curr(E,phi_l_ca,X_Li_ca(i),cathode,elde,elyt,cathode_interface,S_ca)+I_app, 0);
+    phi_s_ca = fzero(@(E) cathode_curr(E,phi_l_ca,X_Li_ca(i),cathode,elde,elyt,cathode_interface,S_ca)-I_app, phi_s_ca);
 
     % Calculate cell voltage
-    E_cell(i) = phi_s_ca - phi_s_an;
+    V_cell(i) = phi_s_ca - phi_s_an;
 end
 
-% Let's plot the cell voltage, as a function of the cathode stoichiometry:
-plot(X_Li_ca,E_cell,'linewidth',2.5)
+% Let's plot the cell voltage, as a function of the state of charge:
+figure(1);
+plot(SOC*100,V_cell,'linewidth',2.5)
 ylim([2.5,4.3])
-xlabel('Li Fraction in Cathode')
-ylabel('Cell potential [V]')
+xlabel('State of charge / %')
+ylabel('Cell voltage / V')
 set(gca,'fontsize',14)
 
 
 %--------------------------------------------------------------------------
 % Helper functions
+% -----------------------------------------------------------------------------
 
 % This function returns the Cantera calculated anode current (in A)
 function anCurr = anode_curr(phi_s,phi_l,X_Li_an,anode,elde,elyt,anode_interface,S_an)
-
-    global F
-
     % Set the active material mole fraction
     set(anode,'X',['Li[anode]:' num2str(X_Li_an) ', V[anode]:' num2str(1-X_Li_an)]);
 
@@ -103,18 +108,16 @@ function anCurr = anode_curr(phi_s,phi_l,X_Li_an,anode,elde,elyt,anode_interface
     setElectricPotential(elde,phi_s);
     setElectricPotential(elyt,phi_l);
 
-    % Get the net reaction rate at the cathode-side interface
-    r = rop_net(anode_interface).*1e3; % [mol/m2/s]
+    % Get the net reaction rate at the anode-side interface
+    % Reaction according to cti file: Li+[elyt] + V[anode] + electron <=> Li[anode]
+    r = rop_net(anode_interface); % [kmol/m2/s]
 
-    % Calculate the current
-    anCurr = r*F*S_an*1;
+    % Calculate the current. Should be negative for cell discharge.
+    anCurr = r*faradayconstant*S_an; %
 end
 
 % This function returns the Cantera calculated cathode current (in A)
 function caCurr = cathode_curr(phi_s,phi_l,X_Li_ca,cathode,elde,elyt,cathode_interface,S_ca)
-
-    global F
-
     % Set the active material mole fractions
     set(cathode,'X',['Li[cathode]:' num2str(X_Li_ca) ', V[cathode]:' num2str(1-X_Li_ca)]);
 
@@ -123,8 +126,9 @@ function caCurr = cathode_curr(phi_s,phi_l,X_Li_ca,cathode,elde,elyt,cathode_int
     setElectricPotential(elyt,phi_l);
 
     % Get the net reaction rate at the cathode-side interface
-    r = rop_net(cathode_interface).*1e3; % [mol/m2/s]
+    % Reaction according to cti file: Li+[elyt] + V[cathode] + electron <=> Li[cathode]
+    r = rop_net(cathode_interface); % [kmol/m2/s]
 
-    % Calculate the current
-    caCurr = r*F*S_ca*(-1);
+    % Calculate the current. Should be negative for cell discharge.
+    caCurr = r*faradayconstant*S_ca*(-1); %
 end

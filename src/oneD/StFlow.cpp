@@ -1,7 +1,7 @@
 //! @file StFlow.cpp
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/oneD/StFlow.h"
 #include "cantera/base/ctml.h"
@@ -13,7 +13,7 @@ using namespace std;
 namespace Cantera
 {
 
-StFlow::StFlow(IdealGasPhase* ph, size_t nsp, size_t points) :
+StFlow::StFlow(ThermoPhase* ph, size_t nsp, size_t points) :
     Domain1D(nsp+c_offset_Y, points),
     m_press(-1.0),
     m_nsp(nsp),
@@ -30,9 +30,14 @@ StFlow::StFlow(IdealGasPhase* ph, size_t nsp, size_t points) :
     m_zfixed(Undef),
     m_tfixed(Undef)
 {
+    if (ph->type() == "IdealGas") {
+        m_thermo = static_cast<IdealGasPhase*>(ph);
+    } else {
+        throw CanteraError("StFlow::StFlow",
+                           "Unsupported phase type: need 'IdealGasPhase'");
+    }
     m_type = cFlowType;
     m_points = points;
-    m_thermo = ph;
 
     if (ph == 0) {
         return; // used to create a dummy object
@@ -186,7 +191,7 @@ void StFlow::setGasAtMidpoint(const doublereal* x, size_t j)
 void StFlow::_finalize(const doublereal* x)
 {
     if (!m_do_multicomponent && m_do_soret) {
-        throw CanteraError("_finalize",
+        throw CanteraError("StFlow::_finalize",
             "Thermal diffusion (the Soret effect) is enabled, and requires "
             "using a multicomponent transport model.");
     }
@@ -755,7 +760,7 @@ void StFlow::restore(const XML_Node& dom, doublereal* soln, int loglevel)
             // This may occur when restoring from a mechanism with a different
             // number of species.
             if (loglevel > 0) {
-                writelog("\nWarning: StFlow::restore: species_enabled is "
+                warn_user("StFlow::restore", "species_enabled is "
                     "length {} but should be length {}. Enabling all species "
                     "equations by default.", x.size(), m_nsp);
             }
@@ -865,10 +870,10 @@ void StFlow::solveEnergyEqn(size_t j)
 void StFlow::setBoundaryEmissivities(doublereal e_left, doublereal e_right)
 {
     if (e_left < 0 || e_left > 1) {
-        throw CanteraError("setBoundaryEmissivities",
+        throw CanteraError("StFlow::setBoundaryEmissivities",
             "The left boundary emissivity must be between 0.0 and 1.0!");
     } else if (e_right < 0 || e_right > 1) {
-        throw CanteraError("setBoundaryEmissivities",
+        throw CanteraError("StFlow::setBoundaryEmissivities",
             "The right boundary emissivity must be between 0.0 and 1.0!");
     } else {
         m_epsilon_left = e_left;

@@ -8,7 +8,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_IDEALSOLNGASVPSS_H
 #define CT_IDEALSOLNGASVPSS_H
@@ -43,6 +43,22 @@ public:
 
     virtual std::string type() const {
         return "IdealSolnGas";
+    }
+
+    //! String indicating the mechanical phase of the matter in this Phase.
+    /*!
+     * Options for the string are:
+     *   * `gas`
+     *   * `undefined`
+     *
+     * If `m_idealGas` is true, returns `gas`. Otherwise, returns `undefined`.
+     */
+    virtual std::string phaseOfMatter() const {
+        if (m_idealGas) {
+            return "gas";
+        } else {
+            return "undefined";
+        }
     }
 
     //! Set this phase to represent an ideal gas
@@ -96,6 +112,7 @@ protected:
     //! @}
 
 public:
+    virtual Units standardConcentrationUnits() const;
     virtual void getActivityConcentrations(doublereal* c) const;
 
     //! Returns the standard concentration \f$ C^0_k \f$, which is used to

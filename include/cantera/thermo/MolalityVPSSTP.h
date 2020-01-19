@@ -13,7 +13,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #ifndef CT_MOLALITYVPSSTP_H
 #define CT_MOLALITYVPSSTP_H
@@ -193,6 +193,14 @@ public:
 
     //! @name  Utilities
     //! @{
+
+    //! String indicating the mechanical phase of the matter in this Phase.
+    /*!
+     * All derived phases from `MolalityVPSSTP` always represent liquids.
+     */
+    virtual std::string phaseOfMatter() const {
+        return "liquid";
+    }
 
     //! Set the pH scale, which determines the scale for single-ion activity
     //! coefficients.
@@ -499,6 +507,12 @@ public:
      *                    map for the molalities of the solutes.
      */
     void setState_TPM(doublereal t, doublereal p, const std::string& m);
+
+    //! @copydoc ThermoPhase::setState
+    /*!
+     * Additionally uses the keys `molalities` or `M` to set the molalities.
+     */
+    virtual void setState(const AnyMap& state);
 
     virtual void getdlnActCoeffdlnN(const size_t ld, doublereal* const dlnActCoeffdlnN) {
         getdlnActCoeffdlnN_numderiv(ld, dlnActCoeffdlnN);

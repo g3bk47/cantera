@@ -1,7 +1,7 @@
 //! @file application.cpp
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "application.h"
 
@@ -38,7 +38,7 @@ static std::mutex app_mutex;
 //! Mutex for controlling access to XML file storage
 static std::mutex xml_mutex;
 
-static int get_modified_time(const std::string& path) {
+int get_modified_time(const std::string& path) {
 #ifdef _WIN32
     HANDLE hFile = CreateFile(path.c_str(), NULL, NULL,
                               NULL, OPEN_EXISTING, 0, NULL);
@@ -170,7 +170,14 @@ void Application::warn_deprecated(const std::string& method,
         return;
     }
     warnings.insert(method);
-    writelog("WARNING: '" + method + "' is deprecated. " + extra);
+    writelog(fmt::format("DeprecationWarning: {}: {}", method, extra));
+    writelogendl();
+}
+
+void Application::warn_user(const std::string& method,
+                            const std::string& extra)
+{
+    writelog(fmt::format("CanteraWarning: {}: {}", method, extra));
     writelogendl();
 }
 
@@ -440,7 +447,7 @@ std::string Application::findInputFile(const std::string& name)
         msg += "    a) move the missing files into the local directory;\n";
         msg += "    b) define environment variable CANTERA_DATA to\n";
         msg += "         point to the directory containing the file.";
-        throw CanteraError("findInputFile", msg);
+        throw CanteraError("Application::findInputFile", msg);
     }
 
     return name;

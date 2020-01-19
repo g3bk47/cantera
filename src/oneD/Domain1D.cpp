@@ -3,7 +3,7 @@
  */
 
 // This file is part of Cantera. See License.txt in the top-level directory or
-// at http://www.cantera.org/license.txt for license and copyright information.
+// at https://cantera.org/license.txt for license and copyright information.
 
 #include "cantera/oneD/Domain1D.h"
 #include "cantera/oneD/MultiJac.h"
@@ -129,9 +129,9 @@ void Domain1D::restore(const XML_Node& dom, doublereal* soln, int loglevel)
         getFloatArray(*nodes[i], values, false);
         if (values.size() != nComponents()) {
             if (loglevel > 0) {
-                writelog("Warning: Domain1D::restore: Got an array of length {}"
-                    " when one of length {} was expected. "
-                    "Tolerances for individual species may not be preserved.\n",
+                warn_user("Domain1D::restore", "Received an array of length "
+                    "{} when one of length {} was expected. Tolerances for "
+                    "individual species may not be preserved.",
                     values.size(), nComponents());
             }
             // The number of components will differ when restoring from a
@@ -251,9 +251,7 @@ void Domain1D::_getInitialSoln(doublereal* x)
 
 doublereal Domain1D::initialValue(size_t n, size_t j)
 {
-    throw CanteraError("Domain1D::initialValue",
-                       "base class method called!");
-    return 0.0;
+    throw NotImplementedError("Domain1D::initialValue");
 }
 
 } // namespace
