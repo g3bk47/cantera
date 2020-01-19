@@ -677,6 +677,149 @@ void ThermoPhase::setState_SPorSV(double Starget, double p,
     }
 }
 
+double ThermoPhase::getStoichAirFuelRatio(const double* fuelComp, const double* oxComp) const
+{
+    // indices of elements
+    auto iC = elementIndex("C");
+    auto iS = elementIndex("S");
+    auto iO = elementIndex("O");
+    auto iH = elementIndex("H");
+
+    // non-normalized element mole fractions
+    auto Co = 0., Cf = 0.;
+    auto So = 0., Sf = 0.;
+    auto Oo = 0., Of = 0.;
+    auto Ho = 0., Hf = 0.;;
+
+    for (size_t i=0; i!=m_kk; ++i)
+    {
+        auto Xf = fuelComp[i];
+        auto Xo = oxComp[i];
+
+        if (iC != npos)
+        {
+            auto nC = nAtoms(i, iC);
+            Co += nC*Xo;
+            Cf += nC*Xf;
+        }
+
+        if (iS != npos)
+        {
+            auto nS = nAtoms(i, iS);
+            So += nS*Xo;
+            Sf += nS*Xf;
+        }
+
+        if (iH != npos)
+        {
+            auto nH = nAtoms(i, iH);
+            Ho += nH*Xo;
+            Hf += nH*Xf;
+        }
+
+        if (iO != npos)
+        {
+            auto nO = nAtoms(i, iO);
+            Oo += nO*Xo;
+            Of += nO*Xf;
+        }
+    }
+
+    return - (Of - 2.*Cf - 2*Sf - Hf/2.) / (Oo - 2*Co - 2.*So - Ho/2.); // todo: div by zero?
+}
+
+void ThermoPhase::setEquivalenceRatioFromMoleFractions_NoNorm(double phi, const double* fuelComp, const double* oxComp, double* buffer)
+{
+    auto p = pressure();
+
+    auto stoichAirFuelRatio = getStoichAirFuelRatio(fuelComp, oxComp);
+
+    // use buffer to avoid allocation
+    for (size_t i=0; i!=m_kk; ++i)
+        buffer[i] = phi * fuelComp[i] + stoichAirFuelRatio * oxComp[i];
+
+    setMoleFractions(buffer);
+    setPressure(p);
+}
+
+void ThermoPhase::setEquivalenceRatioFromMoleFractions(double phi, const double* fuelComp, const double* oxComp)
+{
+    auto p = pressure();
+    vector_fp X(2*m_kk); // mole fractions of fuel and oxidizer
+
+    setMoleFractions(fuelComp);
+    getMoleFractions(X.data());
+
+    setMoleFractions(oxComp);
+    vector_fp Xoxidizer(m_kk);
+    getMoleFractions(X.data() + m_kk);
+
+    setPressure(p);
+    setEquivalenceRatioFromMoleFractions_NoNorm(phi, X.data(), X.data() + m_kk, X.data());
+}
+
+void ThermoPhase::setEquivalenceRatioFromMoleFractions(double phi, const std::string& fuelComp, const std::string& oxComp)
+{
+    setEquivalenceRatioFromMoleFractions(phi,
+            parseCompString(fuelComp.find(":") != std::string::npos ? fuelComp : fuelComp+":1.0"),
+            parseCompString(oxComp.find(":") != std::string::npos ? oxComp : oxComp+":1.0"));
+}
+
+void ThermoPhase::setEquivalenceRatioFromMoleFractions(double phi, const compositionMap& fuelComp, const compositionMap& oxComp)
+{
+    auto p = pressure();
+    vector_fp X(2*m_kk); // mole fractions of fuel and oxidizer
+
+    setMoleFractionsByName(fuelComp);
+    getMoleFractions(X.data());
+
+    setMoleFractionsByName(oxComp);
+    getMoleFractions(X.data() + m_kk);
+
+    setPressure(p);
+    setEquivalenceRatioFromMoleFractions_NoNorm(phi, X.data(), X.data() + m_kk, X.data());
+}
+
+void ThermoPhase::setEquivalenceRatioFromMassFractions(double phi, const double* fuelComp, const double* oxComp)
+{
+    auto p = pressure();
+    vector_fp X(2*m_kk); // mole fractions of fuel and oxidizer
+
+    setMassFractions(fuelComp);
+    getMoleFractions(X.data());
+
+    setMassFractions(oxComp);
+    getMoleFractions(X.data() + m_kk);
+
+    setPressure(p);
+    setEquivalenceRatioFromMoleFractions_NoNorm(phi, X.data(), X.data() + m_kk, X.data());
+}
+
+void ThermoPhase::setEquivalenceRatioFromMassFractions(double phi, const std::string& fuelComp, const std::string& oxComp)
+{
+    setEquivalenceRatioFromMassFractions(phi,
+            parseCompString(fuelComp.find(":") != std::string::npos ? fuelComp : fuelComp+":1.0"),
+            parseCompString(oxComp.find(":") != std::string::npos ? oxComp : oxComp+":1.0"));
+}
+
+void ThermoPhase::setEquivalenceRatioFromMassFractions(double phi, const compositionMap fuelComp, const compositionMap oxComp)
+{
+    auto p = pressure();
+    vector_fp X(2*m_kk); // mole fractions of fuel and oxidizer
+
+    setMassFractionsByName(fuelComp);
+    getMoleFractions(X.data());
+
+    setMassFractionsByName(oxComp);
+    getMoleFractions(X.data() + m_kk);
+
+    setPressure(p);
+    setEquivalenceRatioFromMoleFractions_NoNorm(phi, X.data(), X.data() + m_kk, X.data());
+}
+
+
+
+
 MultiSpeciesThermo& ThermoPhase::speciesThermo(int k)
 {
     return m_spthermo;

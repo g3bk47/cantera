@@ -745,40 +745,17 @@ cdef class ThermoPhase(_SolutionBase):
             and oxidizer in self.species_names):
             oxidizer += ':1.0'
 
+
+        
+
         self.TPX = None, None, fuel
         Xf = self.X
         self.TPX = None, None, oxidizer
         Xo = self.X
 
-        nO = np.array([self.n_atoms(k, 'O') for k in range(self.n_species)])
+        # how to call setEquivalenceRatioMoleFractions from C++ with phi, Xf and Xo ?
 
-        if 'C' in self.element_names:
-            nC = np.array([self.n_atoms(k, 'C') for k in range(self.n_species)])
-        else:
-            nC = np.zeros(self.n_species)
-
-        if 'H' in self.element_names:
-            nH = np.array([self.n_atoms(k, 'H') for k in range(self.n_species)])
-        else:
-            nH = np.zeros(self.n_species)
-
-        if 'S' in self.element_names:
-            nS = np.array([self.n_atoms(k, 'S') for k in range(self.n_species)])
-        else:
-            nS = np.zeros(self.n_species)
-
-        Cf = nC.dot(Xf)
-        Co = nC.dot(Xo)
-        Of = nO.dot(Xf)
-        Oo = nO.dot(Xo)
-        Hf = nH.dot(Xf)
-        Ho = nH.dot(Xo)
-        Sf = nS.dot(Xf)
-        So = nS.dot(Xo)
-
-        stoichAirFuelRatio = - (Of - 2*Cf - 2*Sf - Hf/2.0) / (Oo - 2*Co - 2*So - Ho/2.0)
-        Xr = phi * Xf + stoichAirFuelRatio * Xo
-        self.TPX = None, None, Xr
+        return ???
 
     def get_equivalence_ratio(self, oxidizers=[], ignore=[]):
         """

@@ -25,13 +25,7 @@ int flamespeed(double phi)
         size_t nsp = gas->nSpecies();
         vector_fp x(nsp, 0.0);
 
-        double C_atoms = 1.0;
-        double H_atoms = 4.0;
-        double ax = C_atoms + H_atoms / 4.0;
-        double fa_stoic = 1.0 / (4.76 * ax);
-        x[gas->speciesIndex("CH4")] = 1.0;
-        x[gas->speciesIndex("O2")] = 0.21 / phi / fa_stoic;
-        x[gas->speciesIndex("N2")] = 0.79 / phi/ fa_stoic;
+        gas.setEquivalenceRatioMoleFractions(phi, "CH4", "O2:0.21,N2:0.79");
 
         gas->setState_TPX(temp, pressure, x.data());
         double rho_in = gas->density();

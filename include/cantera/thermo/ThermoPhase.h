@@ -1170,6 +1170,16 @@ public:
      */
     virtual void setState(const AnyMap& state);
 
+
+    double getStoichAirFuelRatio(const double* fuelComp, const double* oxComp) const;
+    void setEquivalenceRatioFromMoleFractions_NoNorm(double phi, const double* fuelComp, const double* oxComp, double* buffer);
+    void setEquivalenceRatioFromMoleFractions(double phi, const double* fuelComp, const double* oxComp);
+    void setEquivalenceRatioFromMoleFractions(double phi, const std::string& fuelComp, const std::string& oxComp);
+    void setEquivalenceRatioFromMassFractions(double phi, const double* fuelComp, const double* oxComp);
+    void setEquivalenceRatioFromMassFractions(double phi, const std::string& fuelComp, const std::string& oxComp);
+    void setEquivalenceRatioFromMassFractions(double phi, const compositionMap fuelComp, const compositionMap oxComp);
+
+
     //@}
 
 private:
