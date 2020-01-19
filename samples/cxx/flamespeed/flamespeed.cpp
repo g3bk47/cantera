@@ -27,7 +27,8 @@ int flamespeed(double phi)
 
         gas.setEquivalenceRatioMoleFractions(phi, "CH4", "O2:0.21,N2:0.79");
 
-        gas->setState_TPX(temp, pressure, x.data());
+        gas->setState_TP(temp, pressure);
+        gas.getMoleFractions(x.data());
         double rho_in = gas->density();
 
         vector_fp yin(nsp);
