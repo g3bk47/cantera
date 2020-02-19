@@ -714,27 +714,27 @@ cdef class ThermoPhase(_SolutionBase):
         def __set__(self, C):
             self._setArray1(thermo_setConcentrations, C)
 
-    def set_equivalence_ratio(self, phi, fuel, oxidizer):
+    def set_equivalence_ratio_X(self, phi, fuel, oxidizer):
         """
         Set the composition to a mixture of *fuel* and *oxidizer* at the
         specified equivalence ratio *phi*, holding temperature and pressure
         constant. Considers the oxidation of C to CO2, H to H2O and S to SO2.
         Other elements are assumed not to participate in oxidation (i.e. N ends up as
-        N2)::
+        N2). The "_X" suffix shows that fuel and oxidizer compositions are 
+        given in mole fractions (do not need to be normalized)::
 
-            >>> gas.set_equivalence_ratio(0.5, 'CH4', 'O2:1.0, N2:3.76')
+            >>> gas.set_equivalence_ratio_X(0.5, 'CH4', 'O2:1.0, N2:3.76')
             >>> gas.mole_fraction_dict()
-            {'CH4': 0.049900199, 'N2': 0.750499001, 'O2': 0.199600798}
-
-            >>> gas.set_equivalence_ratio(1.2, {'NH3':0.8, 'CO':0.2}, 'O2:1.0')
+            {'CH4': 0.028376330528516805, 'N2': 0.7452356312613028, 'O2': 0.22638803821018033}
+            >>> gas.set_equivalence_ratio_X(1.2, {'NH3':0.8, 'CO':0.2}, 'O2:1.0')
             >>> gas.mole_fraction_dict()
-            {'CO': 0.1263157894, 'NH3': 0.505263157, 'O2': 0.36842105}
+            {'CO': 0.14784006249290751, 'NH3': 0.3595664554540104, 'O2': 0.49259348205308207}
 
         :param phi: Equivalence ratio
         :param fuel:
-            Fuel species name or molar composition as string, array, or dict.
+            Fuel species name or mole fractions as string, array, or dict.
         :param oxidizer:
-            Oxidizer species name or molar composition as a string, array, or
+            Oxidizer species name or mole fractions as a string, array, or
             dict.
         """
         if (isinstance(fuel, str) and ':' not in fuel
@@ -745,91 +745,479 @@ cdef class ThermoPhase(_SolutionBase):
             and oxidizer in self.species_names):
             oxidizer += ':1.0'
 
+        original_state = self.state
         self.TPX = None, None, fuel
         Xf = self.X
         self.TPX = None, None, oxidizer
         Xo = self.X
 
-        nO = np.array([self.n_atoms(k, 'O') for k in range(self.n_species)])
-
-        if 'C' in self.element_names:
-            nC = np.array([self.n_atoms(k, 'C') for k in range(self.n_species)])
-        else:
-            nC = np.zeros(self.n_species)
-
-        if 'H' in self.element_names:
-            nH = np.array([self.n_atoms(k, 'H') for k in range(self.n_species)])
-        else:
-            nH = np.zeros(self.n_species)
-
-        if 'S' in self.element_names:
-            nS = np.array([self.n_atoms(k, 'S') for k in range(self.n_species)])
-        else:
-            nS = np.zeros(self.n_species)
-
-        Cf = nC.dot(Xf)
-        Co = nC.dot(Xo)
-        Of = nO.dot(Xf)
-        Oo = nO.dot(Xo)
-        Hf = nH.dot(Xf)
-        Ho = nH.dot(Xo)
-        Sf = nS.dot(Xf)
-        So = nS.dot(Xo)
-
-        stoichAirFuelRatio = - (Of - 2*Cf - 2*Sf - Hf/2.0) / (Oo - 2*Co - 2*So - Ho/2.0)
-        Xr = phi * Xf + stoichAirFuelRatio * Xo
-        self.TPX = None, None, Xr
-
-    def get_equivalence_ratio(self, oxidizers=[], ignore=[]):
+        cdef np.ndarray[np.double_t, ndim=1] f = \
+                np.ascontiguousarray(Xf, dtype=np.double)
+        cdef np.ndarray[np.double_t, ndim=1] o = \
+                np.ascontiguousarray(Xo, dtype=np.double)
+       
+        self.state = original_state
+        self.thermo.setEquivalenceRatio_X(phi, &f[0], &o[0])
+ 
+    def set_equivalence_ratio(self, phi, fuel, oxidizer):
         """
-        Get the composition of a fuel/oxidizer mixture. This gives the
-        equivalence ratio of an unburned mixture. This is not a quantity that is
-        conserved after oxidation. Considers the oxidation of C to CO2, H to H2O
-        and S to SO2. Other elements are assumed not to participate in oxidation
-        (i.e. N ends up as N2).
+        Set the composition to a mixture of *fuel* and *oxidizer* at the
+        specified equivalence ratio *phi*, holding temperature and pressure
+        constant. Considers the oxidation of C to CO2, H to H2O and S to SO2.
+        Other elements are assumed not to participate in oxidation (i.e. N ends up as
+        N2). Fuel and oxidizer compositions are 
+        given in mole fractions (do not need to be normalized)::
 
-        :param oxidizers:
-            List of oxidizer species names as strings. Default: with
-            ``oxidizers=[]``, every species that contains O but does not contain
-            H, C, or S is considered to be an oxidizer.
-        :param ignore:
-            List of species names as strings to ignore.
+            >>> gas.set_equivalence_ratio(0.5, 'CH4', 'O2:1.0, N2:3.76')
+            >>> gas.mass_fraction_dict()
+            {'CH4': 0.028376330528516805, 'N2': 0.7452356312613028, 'O2': 0.22638803821018033}
+            >>> gas.set_equivalence_ratio_X(1.2, {'NH3':0.8, 'CO':0.2}, 'O2:1.0')
+            >>> gas.mole_fraction_dict()
+            {'CO': 0.14784006249290751, 'NH3': 0.3595664554540104, 'O2': 0.49259348205308207}
 
-        >>> gas.set_equivalence_ratio(0.5, 'CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
-        >>> gas.get_equivalence_ratio()
-        0.50000000000000011
-        >>> gas.get_equivalence_ratio(['O2'])  # Only consider O2 as the oxidizer instead of O2 and NO
-        0.48809523809523814
-        >>> gas.X = 'CH4:1, O2:2, NO:0.1'
-        >>> gas.get_equivalence_ratio(ignore=['NO'])
-        1.0
+        :param phi: Equivalence ratio
+        :param fuel:
+            Fuel species name or mole fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mole fractions as a string, array, or
+            dict.
         """
-        if not oxidizers:
-            # Default behavior, find all possible oxidizers
-            oxidizers = []
-            for s in self.species():
-                if all(y not in s.composition for y in ['C', 'H', 'S']):
-                    oxidizers.append(s.name)
 
-        alpha = 0
-        mol_O = 0
-        for k, s in enumerate(self.species()):
-            if s.name in ignore:
-                continue
-            elif s.name in oxidizers:
-                mol_O += s.composition.get('O', 0) * self.X[k]
-            else:
-                nC = s.composition.get('C', 0)
-                nH = s.composition.get('H', 0)
-                nO = s.composition.get('O', 0)
-                nS = s.composition.get('S', 0)
+        self.set_equivalence_ratio_X(phi, fuel, oxidizer)
 
-                alpha += (2 * nC + nH / 2 + 2 * nS - nO) * self.X[k]
+    def set_equivalence_ratio_Y(self, phi, fuel, oxidizer):
+        """
+        Set the composition to a mixture of *fuel* and *oxidizer* at the
+        specified equivalence ratio *phi*, holding temperature and pressure
+        constant. Considers the oxidation of C to CO2, H to H2O and S to SO2.
+        Other elements are assumed not to participate in oxidation (i.e. N ends up as
+        N2). The "_Y" suffix shows that fuel and oxidizer compositions are 
+        given in mass fractions (do not need to be normalized)::
 
-        if mol_O == 0:
-            return float('inf')
-        else:
-            return alpha / mol_O
+            >>> gas.set_equivalence_ratio_Y(0.5, 'CH4', 'O2:1.0, N2:3.76')
+            >>> gas.mass_fraction_dict()
+            {'CH4': 0.025657103644847218, 'N2': 0.7696490105662551, 'O2': 0.20469388578889766}
+            >>> gas.set_equivalence_ratio_Y(1.2, {'NH3':0.8, 'CO':0.2}, 'O2:1.0')
+            >>> gas.mass_fraction_dict()
+            {'CO': 0.09829928675330099, 'NH3': 0.39319714701320396, 'O2': 0.5085035662334948}
+
+        :param phi: Equivalence ratio
+        :param fuel:
+            Fuel species name or mass fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mass fractions as a string, array, or
+            dict.
+        """
+        if (isinstance(fuel, str) and ':' not in fuel
+            and fuel in self.species_names):
+            fuel += ':1.0'
+
+        if (isinstance(oxidizer, str) and ':' not in oxidizer
+            and oxidizer in self.species_names):
+            oxidizer += ':1.0'
+
+        original_state = self.state
+        self.TPY = None, None, fuel
+        Xf = self.Y
+        self.TPY = None, None, oxidizer
+        Xo = self.Y
+
+        cdef np.ndarray[np.double_t, ndim=1] f = \
+                np.ascontiguousarray(Xf, dtype=np.double)
+        cdef np.ndarray[np.double_t, ndim=1] o = \
+                np.ascontiguousarray(Xo, dtype=np.double)
+        
+        self.state = original_state 
+        
+        self.thermo.setEquivalenceRatio_Y(phi, &f[0], &o[0])
+ 
+    def set_mixture_fraction_X(self, mixFrac, fuel, oxidizer):
+        """
+        Set the composition to a mixture of *fuel* and *oxidizer* at the
+        specified Bilger mixture fraction *mixFrac* (kg fuel / kg mixture), holding
+        temperature and pressure constant. Considers the oxidation of C to CO2,
+        H to H2O and S to SO2. Other elements are assumed not to participate in
+        oxidation (i.e. N ends up as N2). The "_X" suffix shows that fuel and
+        oxidizer compositions are  given in mole fractions (do not need to be
+        normalized)::
+
+            >>> gas.set_mixture_fraction_X(0.5, 'CH4', 'O2:1.0, N2:3.76')
+            >>> gas.mass_fraction_dict()
+            {'CH4': 0.5, 'N2': 0.38350014242997776, 'O2': 0.11649985757002226}
+            >>> gas.set_mixture_fraction_X(0.5, {'NH3':0.8, 'CO':0.2}, 'O2:1.0')
+            >>> gas.mass_fraction_dict()
+            {'CO': 0.14568206877899598, 'NH3': 0.354317931221004, 'O2': 0.5}
+
+        :param mixFrac: Mixture fraction (kg fuel / kg mixture)
+        :param fuel:
+            Fuel species name or mole fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mole fractions as a string, array, or
+            dict.
+        """
+
+        if (isinstance(fuel, str) and ':' not in fuel
+            and fuel in self.species_names):
+            fuel += ':1.0'
+
+        if (isinstance(oxidizer, str) and ':' not in oxidizer
+            and oxidizer in self.species_names):
+            oxidizer += ':1.0'
+
+        original_state = self.state
+        self.TPX = None, None, fuel
+        Xf = self.X
+        self.TPX = None, None, oxidizer
+        Xo = self.X
+
+        cdef np.ndarray[np.double_t, ndim=1] f = \
+                np.ascontiguousarray(Xf, dtype=np.double)
+        cdef np.ndarray[np.double_t, ndim=1] o = \
+                np.ascontiguousarray(Xo, dtype=np.double)
+        
+        self.state = original_state 
+        
+        self.thermo.setMixtureFraction_X(mixFrac, &f[0], &o[0])
+
+    def set_mixture_fraction_Y(self, mixFrac, fuel, oxidizer):
+        """
+        Set the composition to a mixture of *fuel* and *oxidizer* at the
+        specified Bilger mixture fraction *mixFrac* (kg fuel / kg mixture), holding
+        temperature and pressure constant. Considers the oxidation of C to CO2,
+        H to H2O and S to SO2. Other elements are assumed not to participate in
+        oxidation (i.e. N ends up as N2). The "_Y" suffix shows that fuel and
+        oxidizer compositions are  given in mass fractions (do not need to be
+        normalized)::
+
+            >>> gas.set_mixture_fraction_Y(0.5, 'CH4', 'O2:1.0, N2:3.76')
+            >>> gas.mass_fraction_dict()
+            {'CH4': 0.5, 'N2': 0.3949579831932773, 'O2': 0.10504201680672269}
+            >>> gas.set_mixture_fraction_Y(0.5, {'NH3':0.8, 'CO':0.2}, 'O2:1.0')
+            >>> gas.mass_fraction_dict()
+            {'CO': 0.1, 'NH3': 0.4, 'O2': 0.5}
+
+        :param mixFrac: Mixture fraction (kg fuel / kg mixture)
+        :param fuel:
+            Fuel species name or mass fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mass fractions as a string, array, or
+            dict.
+        """
+
+        if (isinstance(fuel, str) and ':' not in fuel
+            and fuel in self.species_names):
+            fuel += ':1.0'
+
+        if (isinstance(oxidizer, str) and ':' not in oxidizer
+            and oxidizer in self.species_names):
+            oxidizer += ':1.0'
+
+        original_state = self.state
+        self.TPY = None, None, fuel
+        Xf = self.Y
+        self.TPY = None, None, oxidizer
+        Xo = self.Y
+
+        cdef np.ndarray[np.double_t, ndim=1] f = \
+                np.ascontiguousarray(Xf, dtype=np.double)
+        cdef np.ndarray[np.double_t, ndim=1] o = \
+                np.ascontiguousarray(Xo, dtype=np.double)
+        
+        self.state = original_state 
+        
+        self.thermo.setMixtureFraction_Y(mixFrac, &f[0], &o[0])
+
+
+    def get_equivalence_ratio_X(self, fuel=None, oxidizer=None):
+        """
+        Get the equivalence ratio of the current mixture. This is a quantity
+        that is conserved after oxidation. Considers the oxidation of C to CO2,
+        H to H2O and S to SO2. Other elements are assumed not to participate in
+        oxidation (i.e. N ends up as N2). If fuel and oxidizer are not specified,
+        the equivalence ratio is computed assuming that the fuel only contains
+        C, H and S (and inert elements) and the oxidizer only contains O (and
+        inert elements). The suffix "_X" shows that the oxidizer and fuel
+        compositions are given in mole fractions.
+
+        :param fuel:
+            Fuel species name or mole fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mole fractions as a string, array, or
+            dict.
+
+            >>> gas.set_equivalence_ratio_X(0.5, 'CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            >>> gas.get_equivalence_ratio_X('CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            0.5
+        """
+        if fuel is None and oxidizer is None:
+            return self.thermo.getEquivalenceRatio()
+
+        if (isinstance(fuel, str) and ':' not in fuel
+            and fuel in self.species_names):
+            fuel += ':1.0'
+
+        if (isinstance(oxidizer, str) and ':' not in oxidizer
+            and oxidizer in self.species_names):
+            oxidizer += ':1.0'
+
+        original_state = self.state
+        self.TPX = None, None, fuel
+        Xf = self.X
+        self.TPX = None, None, oxidizer
+        Xo = self.X
+
+        cdef np.ndarray[np.double_t, ndim=1] f = \
+                np.ascontiguousarray(Xf, dtype=np.double)
+        cdef np.ndarray[np.double_t, ndim=1] o = \
+                np.ascontiguousarray(Xo, dtype=np.double)
+ 
+        self.state = original_state 
+        
+        return self.thermo.getEquivalenceRatio_X(&f[0], &o[0])
+
+    def get_equivalence_ratio(self, fuel=None, oxidizer=None):
+        """
+        Get the equivalence ratio of the current mixture. This is a quantity
+        that is conserved after oxidation. Considers the oxidation of C to CO2,
+        H to H2O and S to SO2. Other elements are assumed not to participate in
+        oxidation (i.e. N ends up as N2). If fuel and oxidizer are not specified,
+        the equivalence ratio is computed assuming that the fuel only contains
+        C, H and S (and inert elements) and the oxidizer only contains O (and
+        inert elements). Oxidizer and fuel compositions are given in mole fractions.
+
+        :param fuel:
+            Fuel species name or mole fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mole fractions as a string, array, or
+            dict.
+
+            >>> gas.set_equivalence_ratio(0.5, 'CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            >>> gas.get_equivalence_ratio('CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            0.5
+        """
+        
+        return self.get_equivalence_ratio_X(fuel, oxidizer)
+
+    def get_equivalence_ratio_Y(self, fuel=None, oxidizer=None):
+        """
+        Get the equivalence ratio of the current mixture. This is a quantity
+        that is conserved after oxidation. Considers the oxidation of C to CO2,
+        H to H2O and S to SO2. Other elements are assumed not to participate in
+        oxidation (i.e. N ends up as N2). If fuel and oxidizer are not specified,
+        the equivalence ratio is computed assuming that the fuel only contains
+        C, H and S (and inert elements) and the oxidizer only contains O (and
+        inert elements). The suffix "_Y" shows that the oxidizer and fuel
+        compositions are given in mass fractions.
+
+        :param fuel:
+            Fuel species name or mass fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mass fractions as a string, array, or
+            dict.
+
+            >>> gas.set_equivalence_ratio_Y(0.5, 'CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            >>> gas.get_equivalence_ratio_Y('CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            0.5
+        """
+        if fuel is None and oxidizer is None:
+            return self.thermo.getEquivalenceRatio()
+
+        if (isinstance(fuel, str) and ':' not in fuel
+            and fuel in self.species_names):
+            fuel += ':1.0'
+
+        if (isinstance(oxidizer, str) and ':' not in oxidizer
+            and oxidizer in self.species_names):
+            oxidizer += ':1.0'
+
+        original_state = self.state
+        self.TPY = None, None, fuel
+        Xf = self.Y
+        self.TPY = None, None, oxidizer
+        Xo = self.Y
+
+        cdef np.ndarray[np.double_t, ndim=1] f = \
+                np.ascontiguousarray(Xf, dtype=np.double)
+        cdef np.ndarray[np.double_t, ndim=1] o = \
+                np.ascontiguousarray(Xo, dtype=np.double)
+ 
+        self.state = original_state 
+        
+        return self.thermo.getEquivalenceRatio_Y(&f[0], &o[0])
+
+    def get_mixture_fraction_X(self, fuel, oxidizer):
+        """
+        Get the Bilger mixture fraction of the current mixture (kg fuel / kg oxidizer)
+        This is a quantity that is conserved after oxidation. Considers the
+        oxidation of C to CO2, H to H2O and S to SO2. Other elements are assumed
+        not to participate in oxidation (i.e. N ends up as N2).
+        The suffix "_X" shows that the oxidizer and fuel compositions are given
+        in mole fractions.
+
+        :param fuel:
+            Fuel species name or mole fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mole fractions as a string, array, or
+            dict.
+
+            >>> gas.set_mixture_fraction_X(0.5, 'CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            >>> gas.get_mixture_fraction_X('CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            0.5
+        """
+        if fuel is None and oxidizer is None:
+            return self.thermo.getEquivalenceRatio()
+
+        if (isinstance(fuel, str) and ':' not in fuel
+            and fuel in self.species_names):
+            fuel += ':1.0'
+
+        if (isinstance(oxidizer, str) and ':' not in oxidizer
+            and oxidizer in self.species_names):
+            oxidizer += ':1.0'
+
+        original_state = self.state
+        self.TPX = None, None, fuel
+        Xf = self.X
+        self.TPX = None, None, oxidizer
+        Xo = self.X
+
+        cdef np.ndarray[np.double_t, ndim=1] f = \
+                np.ascontiguousarray(Xf, dtype=np.double)
+        cdef np.ndarray[np.double_t, ndim=1] o = \
+                np.ascontiguousarray(Xo, dtype=np.double)
+ 
+        self.state = original_state 
+        
+        return self.thermo.getMixtureFraction_X(&f[0], &o[0])
+
+    def get_mixture_fraction_Y(self, fuel, oxidizer):
+        """
+        Get the Bilger mixture fraction of the current mixture (kg fuel / kg oxidizer)
+        This is a quantity that is conserved after oxidation. Considers the
+        oxidation of C to CO2, H to H2O and S to SO2. Other elements are assumed
+        not to participate in oxidation (i.e. N ends up as N2).
+        The suffix "_Y" shows that the oxidizer and fuel compositions are given
+        in mass fractions.
+
+        :param fuel:
+            Fuel species name or mass fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mass fractions as a string, array, or
+            dict.
+
+            >>> gas.set_mixture_fraction_Y(0.5, 'CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            >>> gas.get_mixture_fraction_Y('CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            0.5
+        """
+        
+        if (isinstance(fuel, str) and ':' not in fuel
+            and fuel in self.species_names):
+            fuel += ':1.0'
+
+        if (isinstance(oxidizer, str) and ':' not in oxidizer
+            and oxidizer in self.species_names):
+            oxidizer += ':1.0'
+
+        original_state = self.state
+        self.TPY = None, None, fuel
+        Xf = self.Y
+        self.TPY = None, None, oxidizer
+        Xo = self.Y
+
+        cdef np.ndarray[np.double_t, ndim=1] f = \
+                np.ascontiguousarray(Xf, dtype=np.double)
+        cdef np.ndarray[np.double_t, ndim=1] o = \
+                np.ascontiguousarray(Xo, dtype=np.double)
+ 
+        self.state = original_state 
+        
+        return self.thermo.getMixtureFraction_Y(&f[0], &o[0])
+
+    def get_stoich_air_fuel_ratio_X(self, fuel, oxidizer):
+        """
+        Get the stoichiometric air to fuel ratio (kmol air / kmol fuel. Considers the
+        oxidation of C to CO2, H to H2O and S to SO2. Other elements are assumed
+        not to participate in oxidation (i.e. N ends up as N2). 
+        The suffix "_X" shows that the oxidizer and fuel compositions are given
+        in mole fractions.
+
+        :param fuel:
+            Fuel species name or mole fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mole fractions as a string, array, or
+            dict.
+
+            >>> gas.set_mixture_fraction_X(0.5, 'CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            >>> gas.get_stoich_air_fuel_ratio_X('CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            6.785529715762273
+        """
+
+        if (isinstance(fuel, str) and ':' not in fuel
+            and fuel in self.species_names):
+            fuel += ':1.0'
+
+        if (isinstance(oxidizer, str) and ':' not in oxidizer
+            and oxidizer in self.species_names):
+            oxidizer += ':1.0'
+
+        original_state = self.state
+        self.TPX = None, None, fuel
+        Xf = self.X
+        self.TPX = None, None, oxidizer
+        Xo = self.X
+
+        cdef np.ndarray[np.double_t, ndim=1] f = \
+                np.ascontiguousarray(Xf, dtype=np.double)
+        cdef np.ndarray[np.double_t, ndim=1] o = \
+                np.ascontiguousarray(Xo, dtype=np.double)
+ 
+        self.state = original_state 
+        
+        return self.thermo.getStoichAirFuelRatio_X(&f[0], &o[0])
+
+    def get_stoich_air_fuel_ratio_Y(self, fuel, oxidizer):
+        """
+        Get the stoichiometric air to fuel ratio (kmol air / kmol fuel. Considers the
+        oxidation of C to CO2, H to H2O and S to SO2. Other elements are assumed
+        not to participate in oxidation (i.e. N ends up as N2). 
+        The suffix "_Y" shows that the oxidizer and fuel compositions are given
+        in mass fractions.
+
+        :param fuel:
+            Fuel species name or mass fractions as string, array, or dict.
+        :param oxidizer:
+            Oxidizer species name or mass fractions as a string, array, or
+            dict.
+
+            >>> gas.set_mixture_fraction_Y(0.5, 'CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            >>> gas.get_stoich_air_fuel_ratio_Y('CH3:0.5, CH3OH:.5, N2:0.125', 'O2:0.21, N2:0.79, NO:0.01')
+            7.981429468428204
+        """
+
+        if (isinstance(fuel, str) and ':' not in fuel
+            and fuel in self.species_names):
+            fuel += ':1.0'
+
+        if (isinstance(oxidizer, str) and ':' not in oxidizer
+            and oxidizer in self.species_names):
+            oxidizer += ':1.0'
+
+        original_state = self.state
+        self.TPY = None, None, fuel
+        Xf = self.Y
+        self.TPY = None, None, oxidizer
+        Xo = self.Y
+
+        cdef np.ndarray[np.double_t, ndim=1] f = \
+                np.ascontiguousarray(Xf, dtype=np.double)
+        cdef np.ndarray[np.double_t, ndim=1] o = \
+                np.ascontiguousarray(Xo, dtype=np.double)
+        self.state = original_state 
+
+        return self.thermo.getStoichAirFuelRatio_Y(&f[0], &o[0])
+
+
+
 
     def elemental_mass_fraction(self, m):
         r"""
