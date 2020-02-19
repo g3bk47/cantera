@@ -19,9 +19,10 @@ gas.TP = 300, ct.one_atm
 gas.set_equivalence_ratio(1, fuel, oxidizer)
 
 # this function can be used to compute the equivalence ratio for any mixture
-# the "basis" indicates that fuel and oxidizer compositions are provided in terms of
-# mole fractions. In case of mass fractions, use basis='mass'
-phi = gas.get_equivalence_ratio(fuel, oxidizer, basis='mole')
+# an optional argument "basis" indicates if fuel and oxidizer compositions are
+# provided in terms of mass or mole fractions. Default is mole fractions. In
+# fuel and oxidizer are given in mass fractions, use basis='mass'
+phi = gas.get_equivalence_ratio(fuel, oxidizer)
 print("phi", phi)
 
 # The equivalence ratio can also be computed from the elemental composition
@@ -32,7 +33,7 @@ phi = gas.get_equivalence_ratio()
 print("phi", phi)
 
 # the mixture fraction Z can be computed as follows:
-Z = gas.get_mixture_fraction(fuel, oxidizer, basis='mole')
+Z = gas.get_mixture_fraction(fuel, oxidizer)
 print("Z", Z)
 
 # The mixture fraction is kg fuel / kg oxidizer. Since the fuel in this example
@@ -45,6 +46,6 @@ print("mass fraction of CH4: ", gas["CH4"].Y)
 # state
 gas.equilibrate('HP')
 phi_burnt = gas.get_equivalence_ratio()
-Z_burnt = gas.get_mixture_fraction(fuel, oxidizer, basis='mole')
+Z_burnt = gas.get_mixture_fraction(fuel, oxidizer)
 print("phi(burnt):", phi_burnt)
 print("Z(burnt):", Z)
