@@ -287,7 +287,7 @@ class TestThermoPhase(utilities.CanteraTest):
         gas = ct.Solution('gri30.xml')
         for phi in np.linspace(0.5, 2.0, 5):
             gas.set_equivalence_ratio(phi, 'CH4:0.8, CH3OH:0.2', 'O2:1.0, N2:3.76')
-            self.assertNear(phi, gas.get_equivalence_ratio())
+            self.assertNear(phi, gas.get_equivalence_ratio('CH4:0.8, CH3OH:0.2', 'O2:1.0, N2:3.76'))
         # Check sulfur species
         sulfur_species = [k for k in ct.Species.listFromFile('nasa_gas.xml') if k.name in ("SO", "SO2")]
         gas = ct.Solution(thermo='IdealGas', kinetics='GasKinetics',
@@ -295,7 +295,7 @@ class TestThermoPhase(utilities.CanteraTest):
         for phi in np.linspace(0.5, 2.0, 5):
             gas.set_equivalence_ratio(phi, 'CH3:0.5, SO:0.25, OH:0.125, N2:0.125', 'O2:0.5, SO2:0.25, CO2:0.125')
             self.assertNear(phi, gas.get_equivalence_ratio('CH3:0.5, SO:0.25, OH:0.125, N2:0.125', 'O2:0.5, SO2:0.25, CO2:0.125'))
-        gas.X = 'CH4:1, N2:1, CO2:1, H2O:1'
+        gas.X = 'CH4:1' # pure fuel
         self.assertEqual(gas.get_equivalence_ratio(), np.inf)
 
     def test_get_set_equivalence_ratio_functions(self):
@@ -304,20 +304,20 @@ class TestThermoPhase(utilities.CanteraTest):
         ox = "O2:0.21,N2:0.79,CO:0.04,CH4:0.01,CO2:0.03"
 
         gas =  ct.Solution("gri30.yaml")
-        gas.set_equivalence_ratio_X(1.3, fuel, ox)
+        gas.set_equivalence_ratio(1.3, fuel, ox)
         gas.TP = 300, 1e5
 
         # set mixture to  burnt state to make sure that equivalence ratio and
         # mixture fraction are indipendent of reaction progress
         gas.equilibrate("HP");
 
-        phi = gas.get_equivalence_ratio_X(fuel, ox)
-        phi_loc = gas.get_equivalence_ratio_X()
-        mf = gas.get_mixture_fraction_X(fuel, ox)
-        l = gas.get_stoich_air_fuel_ratio_X(fuel, ox)
+        phi = gas.get_equivalence_ratio(fuel, ox)
+        phi_loc = gas.get_equivalence_ratio()
+        mf = gas.get_mixture_fraction(fuel, ox)
+        l = gas.get_stoich_air_fuel_ratio(fuel, ox)
 
-        gas.set_mixture_fraction_X(mf, fuel,ox)
-        phi2 = gas.get_equivalence_ratio_X(fuel, ox)
+        gas.set_mixture_fraction(mf, fuel,ox)
+        phi2 = gas.get_equivalence_ratio(fuel, ox)
 
         self.assertNear(phi, 1.3)
         self.assertNear(phi2, 1.3)
@@ -325,24 +325,24 @@ class TestThermoPhase(utilities.CanteraTest):
         self.assertNear(mf, 0.13415725911)
         self.assertNear(l, 6.5972850678733)
 
-        # do the same for *_Y functions
+        # do the same for mass-based functions
 
         gas.TPX = None, None, fuel
         fuel = gas.Y
         gas.TPX = None, None, ox
         ox = gas.Y
 
-        gas.set_equivalence_ratio_Y(1.3, fuel, ox)
+        gas.set_equivalence_ratio(1.3, fuel, ox, basis='mass')
 
         gas.equilibrate("HP");
 
-        phi = gas.get_equivalence_ratio_Y(fuel, ox)
-        phi_loc = gas.get_equivalence_ratio_Y()
-        mf = gas.get_mixture_fraction_Y(fuel, ox)
-        l = gas.get_stoich_air_fuel_ratio_Y(fuel, ox)
+        phi = gas.get_equivalence_ratio(fuel, ox, basis='mass')
+        phi_loc = gas.get_equivalence_ratio()
+        mf = gas.get_mixture_fraction(fuel, ox, basis='mass')
+        l = gas.get_stoich_air_fuel_ratio(fuel, ox, basis='mass')
 
-        gas.set_mixture_fraction_Y(mf, fuel,ox)
-        phi2 = gas.get_equivalence_ratio_Y(fuel, ox)
+        gas.set_mixture_fraction(mf, fuel,ox, basis='mass')
+        phi2 = gas.get_equivalence_ratio(fuel, ox, basis='mass')
 
         # make sure the pressure was held constant
         p = gas.P

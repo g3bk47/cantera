@@ -109,7 +109,7 @@ TEST_F(TestThermoMethods, setState_AnyMap)
     EXPECT_NEAR(thermo->temperature(), 298.15, 1e-6);
 }
 
-TEST(TestThermoMethods, getSet_EquilRatio_MixtureFraction)
+TEST(TestMixtureMethods, getSet_EquilRatio_MixtureFraction)
 {
     auto sol = newSolution("gri30.yaml", "gri30", "None");
     auto pgas = sol->thermo();
