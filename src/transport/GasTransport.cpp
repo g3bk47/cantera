@@ -256,7 +256,7 @@ void GasTransport::getMixDiffCoeffsMass(span<double> d)
                 sum2 += m_molefracs[i] * m_mw[i] / m_bdiff(k,i);
             }
             sum1 *= p;
-            sum2 *= p * m_molefracs[k] / (mmw - m_mw[k]*m_molefracs[k]);
+            sum2 *= p * m_molefracs[k] / std::max(Tiny, mmw - m_mw[k]*m_molefracs[k]);
             d[k] = 1.0 / (sum1 + sum2);
         }
     }
